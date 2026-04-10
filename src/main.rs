@@ -616,10 +616,21 @@ async fn main() -> Result<()> {
                 }
             }
             if json {
-                let l0 = store.get_identity_facts(0)?;
+                // L0 comes from config (not the identity_facts table)
+                let id = &cfg.identity;
+                let mut l0_entries = Vec::new();
+                if let Some(name) = &id.name {
+                    l0_entries.push(serde_json::json!({"key": "name", "value": name}));
+                }
+                if let Some(role) = &id.role {
+                    l0_entries.push(serde_json::json!({"key": "role", "value": role}));
+                }
+                if let Some(purpose) = &id.vault_purpose {
+                    l0_entries.push(serde_json::json!({"key": "vault_purpose", "value": purpose}));
+                }
                 let l1 = store.get_identity_facts(1)?;
                 let result = serde_json::json!({
-                    "l0": l0.iter().map(|f| serde_json::json!({"key": &f.key, "value": &f.value})).collect::<Vec<_>>(),
+                    "l0": l0_entries,
                     "l1": l1.iter().map(|f| serde_json::json!({"key": &f.key, "value": &f.value, "source": &f.source, "updated_at": &f.updated_at})).collect::<Vec<_>>(),
                 });
                 println!("{}", serde_json::to_string_pretty(&result)?);

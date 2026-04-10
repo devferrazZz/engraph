@@ -27,6 +27,9 @@ pub fn extract_l1_facts(store: &Store, profile: &VaultProfile) -> Result<L1Summa
 
     // ── Active projects ─────────────────────────────────────────
     for file in &all_files {
+        if path_is_in_excluded_folder(&file.path) {
+            continue;
+        }
         if file.tags.iter().any(|t| t.eq_ignore_ascii_case("project")) {
             let name = file_stem(&file.path);
             store.upsert_identity_fact(1, "active_project", &name, Some(&file.path))?;
@@ -229,6 +232,26 @@ fn file_stem(path: &str) -> String {
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_else(|| path.to_string())
+}
+
+/// Return true if the path is inside a templates or archive folder and should be
+/// excluded from L1 extraction. Matches any path component named "templates",
+/// "template", "archive", or "archives" (case-insensitive), as well as PARA-style
+/// numbered variants (e.g. "05-Templates", "04-Archive").
+fn path_is_in_excluded_folder(path: &str) -> bool {
+    for component in path.split('/') {
+        let stripped = component
+            .trim_start_matches(|c: char| c.is_ascii_digit())
+            .trim_start_matches(['-', '_', ' ']);
+        let lower = stripped.to_ascii_lowercase();
+        if matches!(
+            lower.as_str(),
+            "templates" | "template" | "archive" | "archives"
+        ) {
+            return true;
+        }
+    }
+    false
 }
 
 /// Check whether a file path belongs to a given folder (case-insensitive prefix match).

@@ -686,15 +686,52 @@ fn count_daily_notes(vault_path: &Path, folders: &FolderMap) -> usize {
 }
 
 /// Count markdown files in the people folder (if detected).
+/// Falls back to scanning common nested paths (e.g. `*/People/`) when the
+/// profile doesn't report a top-level people folder.
 fn count_people_notes(vault_path: &Path, folders: &FolderMap) -> usize {
-    let Some(ref people) = folders.people else {
+    // 1. Use profile-detected folder if available.
+    if let Some(ref people) = folders.people {
+        let people_dir = vault_path.join(people);
+        if people_dir.is_dir() {
+            return count_md_files_in_dir(&people_dir);
+        }
+    }
+
+    // 2. Fallback: walk one level of subdirectories looking for a "People" subfolder.
+    let Ok(entries) = std::fs::read_dir(vault_path) else {
         return 0;
     };
-    let people_dir = vault_path.join(people);
-    if !people_dir.is_dir() {
-        return 0;
+    for entry in entries.filter_map(|e| e.ok()) {
+        let Ok(ft) = entry.file_type() else { continue };
+        if !ft.is_dir() {
+            continue;
+        }
+        if entry.file_name().to_string_lossy().starts_with('.') {
+            continue;
+        }
+        let subdir = entry.path();
+        let Ok(inner) = std::fs::read_dir(&subdir) else {
+            continue;
+        };
+        for inner_entry in inner.filter_map(|e| e.ok()) {
+            let Ok(ift) = inner_entry.file_type() else {
+                continue;
+            };
+            if !ift.is_dir() {
+                continue;
+            }
+            let name = inner_entry.file_name();
+            let name_lower = name.to_string_lossy().to_ascii_lowercase();
+            if name_lower == "people" {
+                let count = count_md_files_in_dir(&inner_entry.path());
+                if count > 0 {
+                    return count;
+                }
+            }
+        }
     }
-    count_md_files_in_dir(&people_dir)
+
+    0
 }
 
 /// Count `.md` files directly in a directory (non-recursive).

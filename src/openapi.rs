@@ -29,6 +29,10 @@ pub fn build_openapi_spec(server_url: &str) -> serde_json::Value {
     paths.insert("/api/delete".into(), build_delete());
     paths.insert("/api/reindex-file".into(), build_reindex_file());
 
+    // Identity endpoints
+    paths.insert("/api/identity".into(), build_identity_endpoint());
+    paths.insert("/api/setup".into(), build_setup_endpoint());
+
     // Migration endpoints
     paths.insert("/api/migrate/preview".into(), build_migrate_preview());
     paths.insert("/api/migrate/apply".into(), build_migrate_apply());
@@ -38,7 +42,7 @@ pub fn build_openapi_spec(server_url: &str) -> serde_json::Value {
         "openapi": "3.1.0",
         "info": {
             "title": "engraph",
-            "version": "1.5.5",
+            "version": "1.6.0",
             "description": "AI-powered semantic search and management API for Obsidian vaults."
         },
         "servers": [{ "url": server_url }],
@@ -446,6 +450,39 @@ fn build_reindex_file() -> serde_json::Value {
                 }}}
             },
             "responses": { "200": { "description": "Re-indexed file info (chunks, docid)" } }
+        }
+    })
+}
+
+fn build_identity_endpoint() -> serde_json::Value {
+    serde_json::json!({
+        "get": {
+            "operationId": "getIdentity",
+            "summary": "Returns compact user identity (L0) and current context (L1).",
+            "responses": { "200": { "description": "Identity block as JSON with 'identity' key" } }
+        }
+    })
+}
+
+fn build_setup_endpoint() -> serde_json::Value {
+    serde_json::json!({
+        "post": {
+            "operationId": "setup",
+            "summary": "Run first-time setup or update identity. Use 'detect' to inspect, 'apply' to configure.",
+            "requestBody": {
+                "required": true,
+                "content": { "application/json": { "schema": {
+                    "type": "object",
+                    "required": ["mode"],
+                    "properties": {
+                        "mode": { "type": "string", "description": "'detect' or 'apply'" },
+                        "name": { "type": "string", "description": "User name (apply mode)" },
+                        "role": { "type": "string", "description": "User role (apply mode)" },
+                        "purpose": { "type": "string", "description": "Vault purpose (apply mode)" }
+                    }
+                }}}
+            },
+            "responses": { "200": { "description": "Setup result as JSON" } }
         }
     })
 }

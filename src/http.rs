@@ -332,6 +332,14 @@ struct ReindexFileBody {
     file: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct SetupBody {
+    mode: String,
+    name: Option<String>,
+    role: Option<String>,
+    purpose: Option<String>,
+}
+
 // ---------------------------------------------------------------------------
 // CORS
 // ---------------------------------------------------------------------------
@@ -388,6 +396,9 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/api/delete", post(handle_delete))
         // Index maintenance
         .route("/api/reindex-file", post(handle_reindex_file))
+        // Identity endpoints
+        .route("/api/identity", get(handle_identity))
+        .route("/api/setup", post(handle_setup))
         // Migration endpoints
         .route("/api/migrate/preview", post(handle_migrate_preview))
         .route("/api/migrate/apply", post(handle_migrate_apply))
@@ -1064,6 +1075,60 @@ async fn handle_reindex_file(
         "chunks": result.total_chunks,
         "docid": result.docid,
     })))
+}
+
+// ---------------------------------------------------------------------------
+// Identity / setup endpoint handlers
+// ---------------------------------------------------------------------------
+
+async fn handle_identity(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, ApiError> {
+    authorize(&headers, &state, false)?;
+    let store = state.store.lock().await;
+    let config = crate::config::Config::load().unwrap_or_default();
+    let block = crate::identity::format_identity_block(&config, &store)
+        .map_err(|e| ApiError::internal(&format!("{e:#}")))?;
+    Ok(Json(serde_json::json!({ "identity": block })))
+}
+
+async fn handle_setup(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Json(body): Json<SetupBody>,
+) -> Result<impl IntoResponse, ApiError> {
+    authorize(&headers, &state, true)?;
+    match body.mode.as_str() {
+        "detect" => {
+            let result = crate::onboarding::run_detect_json(&state.vault_path)
+                .map_err(|e| ApiError::internal(&format!("{e:#}")))?;
+            Ok(Json(result))
+        }
+        "apply" => {
+            let mut config = crate::config::Config::load().unwrap_or_default();
+            let data_dir = crate::config::Config::data_dir()
+                .map_err(|e| ApiError::internal(&format!("{e:#}")))?;
+            let flags = crate::onboarding::ApplyFlags {
+                name: body.name,
+                role: body.role,
+                purpose: body.purpose,
+                identity_only: false,
+                reindex_only: false,
+            };
+            let result = crate::onboarding::run_apply_json(
+                &state.vault_path,
+                &mut config,
+                &data_dir,
+                flags,
+            )
+            .map_err(|e| ApiError::internal(&format!("{e:#}")))?;
+            Ok(Json(result))
+        }
+        other => Err(ApiError::bad_request(&format!(
+            "Unknown mode: {other}. Use 'detect' or 'apply'."
+        ))),
+    }
 }
 
 // ---------------------------------------------------------------------------

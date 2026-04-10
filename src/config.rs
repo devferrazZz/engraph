@@ -43,6 +43,38 @@ pub struct PluginConfig {
     pub public_url: Option<String>,
 }
 
+/// User identity for AI agent context.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct IdentityConfig {
+    pub name: Option<String>,
+    pub role: Option<String>,
+    pub vault_purpose: Option<String>,
+}
+
+/// Memory layer feature flags.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MemoryConfig {
+    pub identity_enabled: bool,
+    pub timeline_enabled: bool,
+    pub mining_enabled: bool,
+    pub mining_strategy: String,
+    pub mining_on_index: bool,
+}
+
+impl Default for MemoryConfig {
+    fn default() -> Self {
+        Self {
+            identity_enabled: true,
+            timeline_enabled: true,
+            mining_enabled: true,
+            mining_strategy: "auto".into(),
+            mining_on_index: true,
+        }
+    }
+}
+
 /// HTTP REST API configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -104,6 +136,10 @@ pub struct Config {
     /// HTTP REST API settings.
     #[serde(default)]
     pub http: HttpConfig,
+    #[serde(default)]
+    pub identity: IdentityConfig,
+    #[serde(default)]
+    pub memory: MemoryConfig,
 }
 
 impl Default for Config {
@@ -118,6 +154,8 @@ impl Default for Config {
             obsidian: ObsidianConfig::default(),
             agents: AgentsConfig::default(),
             http: HttpConfig::default(),
+            identity: IdentityConfig::default(),
+            memory: MemoryConfig::default(),
         }
     }
 }
@@ -378,5 +416,34 @@ public_url = "https://vault.example.com"
 "#;
         let config: Config = toml::from_str(toml).unwrap();
         assert_eq!(config.http.plugin.name.as_deref(), Some("my-vault"));
+    }
+
+    #[test]
+    fn test_identity_config_deserializes() {
+        let toml_str = r#"
+[identity]
+name = "Test User"
+role = "Developer"
+vault_purpose = "notes"
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.identity.name, Some("Test User".into()));
+        assert_eq!(config.identity.role, Some("Developer".into()));
+        assert_eq!(config.identity.vault_purpose, Some("notes".into()));
+    }
+
+    #[test]
+    fn test_identity_config_defaults_to_empty() {
+        let config = Config::default();
+        assert!(config.identity.name.is_none());
+        assert!(config.identity.role.is_none());
+    }
+
+    #[test]
+    fn test_memory_config_defaults() {
+        let config = Config::default();
+        assert!(config.memory.identity_enabled);
+        assert!(config.memory.timeline_enabled);
+        assert!(config.memory.mining_enabled);
     }
 }

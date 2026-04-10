@@ -53,6 +53,7 @@ pub fn start_watcher(
                 &store_lock,
                 &mut *embedder_lock,
                 false,
+                profile_clone.as_ref().as_ref(),
             ) {
                 tracing::warn!("Startup reconciliation failed: {:#}", e);
             }
@@ -302,7 +303,7 @@ pub async fn run_consumer(
     store: Arc<Mutex<Store>>,
     embedder: Arc<Mutex<Box<dyn EmbedModel + Send>>>,
     vault_path: Arc<PathBuf>,
-    _profile: Arc<Option<VaultProfile>>,
+    profile: Arc<Option<VaultProfile>>,
     config: Config,
     recent_writes: RecentWrites,
 ) {
@@ -625,6 +626,7 @@ pub async fn run_consumer(
                         &store_guard,
                         &mut *embedder_guard,
                         false,
+                        profile.as_ref().as_ref(),
                     ) {
                         Ok(result) => {
                             tracing::info!(

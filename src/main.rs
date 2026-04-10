@@ -1,6 +1,5 @@
 use engraph::config;
 use engraph::indexer;
-use engraph::profile;
 use engraph::search;
 use engraph::store;
 
@@ -66,10 +65,44 @@ enum Command {
         all: bool,
     },
 
-    /// Initialize vault profile with auto-detection.
+    /// Initialize vault profile, identity, and search index.
     Init {
-        /// Path to the vault (defaults to current directory).
+        /// Path to vault directory.
         path: Option<PathBuf>,
+        /// Only run identity setup (skip indexing).
+        #[arg(long)]
+        identity: bool,
+        /// Only re-index (skip identity prompts).
+        #[arg(long)]
+        reindex: bool,
+        /// Detect vault without writing anything (agent mode).
+        #[arg(long)]
+        detect: bool,
+        /// Output as JSON (agent mode).
+        #[arg(long)]
+        json: bool,
+        /// Suppress interactive prompts.
+        #[arg(long)]
+        quiet: bool,
+        /// User name (non-interactive mode).
+        #[arg(long)]
+        name: Option<String>,
+        /// User role (non-interactive mode).
+        #[arg(long)]
+        role: Option<String>,
+        /// Vault purpose (non-interactive mode).
+        #[arg(long)]
+        purpose: Option<String>,
+    },
+
+    /// Print identity block (L0 + L1 context for AI agents).
+    Identity {
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+        /// Force L1 re-extraction without full reindex.
+        #[arg(long)]
+        refresh: bool,
     },
 
     /// Configure engraph settings.
@@ -515,8 +548,17 @@ async fn main() -> Result<()> {
             }
         }
 
-        Command::Init { path } => {
-            // Resolve vault path: CLI arg > config > cwd.
+        Command::Init {
+            path,
+            identity,
+            reindex,
+            detect,
+            json,
+            quiet,
+            name,
+            role,
+            purpose,
+        } => {
             cfg.merge_vault_path(path);
             let vault_path = match &cfg.vault_path {
                 Some(p) => p.clone(),
@@ -524,149 +566,77 @@ async fn main() -> Result<()> {
             };
             let vault_path = vault_path.canonicalize().unwrap_or(vault_path);
 
-            println!("Detecting vault profile for: {}", vault_path.display());
+            if detect {
+                let result = engraph::onboarding::run_detect_json(&vault_path)?;
+                println!("{}", serde_json::to_string_pretty(&result)?);
+                return Ok(());
+            }
 
-            let vault_type = profile::detect_vault_type(&vault_path);
-            let structure = profile::detect_structure(&vault_path)?;
-            let stats = profile::scan_vault_stats(&vault_path)?;
+            if json {
+                let flags = engraph::onboarding::ApplyFlags {
+                    name,
+                    role,
+                    purpose,
+                    identity_only: identity,
+                    reindex_only: reindex,
+                };
+                let result =
+                    engraph::onboarding::run_apply_json(&vault_path, &mut cfg, &data_dir, flags)?;
+                println!("{}", serde_json::to_string_pretty(&result)?);
+                return Ok(());
+            }
 
-            // Print detection results.
-            println!();
-            println!("  Vault type:   {:?}", vault_type);
-            println!("  Structure:    {:?}", structure.method);
-            if let Some(ref inbox) = structure.folders.inbox {
-                println!("    inbox:      {}", inbox);
-            }
-            if let Some(ref projects) = structure.folders.projects {
-                println!("    projects:   {}", projects);
-            }
-            if let Some(ref areas) = structure.folders.areas {
-                println!("    areas:      {}", areas);
-            }
-            if let Some(ref resources) = structure.folders.resources {
-                println!("    resources:  {}", resources);
-            }
-            if let Some(ref archive) = structure.folders.archive {
-                println!("    archive:    {}", archive);
-            }
-            if let Some(ref templates) = structure.folders.templates {
-                println!("    templates:  {}", templates);
-            }
-            if let Some(ref daily) = structure.folders.daily {
-                println!("    daily:      {}", daily);
-            }
-            if let Some(ref people) = structure.folders.people {
-                println!("    people:     {}", people);
-            }
-            println!();
-            println!("  Total .md files:    {}", stats.total_files);
-            println!("  With frontmatter:   {}", stats.files_with_frontmatter);
-            println!("  Wikilinks:          {}", stats.wikilink_count);
-            println!("  Unique tags:        {}", stats.unique_tags);
-            println!("  Folders:            {}", stats.folder_count);
-            println!("  Max folder depth:   {}", stats.folder_depth);
-
-            let vault_profile = profile::VaultProfile {
-                vault_path: vault_path.clone(),
-                vault_type,
-                structure,
-                stats,
+            let flags = engraph::onboarding::InteractiveFlags {
+                name,
+                role,
+                purpose,
+                identity_only: identity,
+                reindex_only: reindex,
+                quiet,
             };
+            engraph::onboarding::run_interactive(&vault_path, &mut cfg, &data_dir, flags)?;
+        }
 
-            // Ensure data dir exists and write vault.toml.
-            std::fs::create_dir_all(&data_dir)?;
-            profile::write_vault_toml(&vault_profile, &data_dir)?;
-
-            println!();
-            println!("Wrote {}", data_dir.join("vault.toml").display());
-
-            // Intelligence onboarding (only if not yet configured)
-            if cfg.intelligence.is_none() {
-                let enable = prompt_intelligence(&data_dir)?;
-                cfg.intelligence = Some(enable);
-                cfg.save()?;
+        Command::Identity { json, refresh } => {
+            let db_path = data_dir.join("engraph.db");
+            if !db_path.exists() {
+                anyhow::bail!("No index found. Run `engraph init` first.");
             }
-
-            // Obsidian CLI detection
-            let obsidian_running = std::process::Command::new("pgrep")
-                .args(["-x", "Obsidian"])
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status()
-                .map(|s| s.success())
-                .unwrap_or(false);
-
-            let obsidian_in_path = std::process::Command::new("which")
-                .arg("obsidian")
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status()
-                .map(|s| s.success())
-                .unwrap_or(false);
-
-            if obsidian_running && obsidian_in_path {
-                eprint!("\nObsidian CLI detected. Enable integration? [Y/n] ");
-                io::stderr().flush()?;
-                let mut answer = String::new();
-                io::stdin().lock().read_line(&mut answer)?;
-                let answer = answer.trim();
-                let enable = answer.is_empty() || answer.eq_ignore_ascii_case("y");
-                if enable {
-                    let vault_name = vault_path
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or("Personal")
-                        .to_string();
-                    cfg.obsidian.enabled = true;
-                    cfg.obsidian.vault_name = Some(vault_name.clone());
-                    cfg.save()?;
-                    println!("Obsidian CLI enabled (vault: {vault_name}).");
-                } else {
-                    println!(
-                        "Obsidian CLI disabled. Enable later with: engraph configure --enable-obsidian-cli"
-                    );
-                }
-            }
-
-            // AI agent detection
-            let home = dirs::home_dir().unwrap_or_default();
-            let agent_configs: &[(&str, &str, &str)] = &[
-                ("Claude Code", "claude-code", ".claude/settings.json"),
-                ("Cursor", "cursor", ".cursor/mcp.json"),
-                ("Windsurf", "windsurf", ".codeium/windsurf/mcp_config.json"),
-            ];
-
-            let mut detected: Vec<(&str, &str, String)> = Vec::new();
-            for (name, key, rel_path) in agent_configs {
-                let full = home.join(rel_path);
-                if full.exists() {
-                    detected.push((name, key, format!("~/{rel_path}")));
-                }
-            }
-
-            if !detected.is_empty() {
-                println!("\nAI agents detected:");
-                for (name, _key, path) in &detected {
-                    println!("  \u{2713} {name} ({path})");
-                }
-                println!(
-                    "\nTo register engraph as MCP server, add to your agent's config:\n  \
-                     \"engraph\": {{\n    \
-                     \"command\": \"engraph\",\n    \
-                     \"args\": [\"serve\"]\n  \
-                     }}"
-                );
-
-                // Record detected agents in config
-                for (_name, key, _path) in &detected {
-                    match *key {
-                        "claude-code" => cfg.agents.claude_code = true,
-                        "cursor" => cfg.agents.cursor = true,
-                        "windsurf" => cfg.agents.windsurf = true,
-                        _ => {}
+            let store = engraph::store::Store::open(&db_path)?;
+            if refresh {
+                let profile = engraph::config::Config::load_vault_profile()?;
+                match profile {
+                    Some(ref p) => {
+                        engraph::identity::extract_l1_facts(&store, p)?;
+                        eprintln!("L1 facts refreshed.");
+                    }
+                    None => {
+                        anyhow::bail!("No vault profile found. Run `engraph init` first.");
                     }
                 }
-                cfg.save()?;
+            }
+            if json {
+                // L0 comes from config (not the identity_facts table)
+                let id = &cfg.identity;
+                let mut l0_entries = Vec::new();
+                if let Some(name) = &id.name {
+                    l0_entries.push(serde_json::json!({"key": "name", "value": name}));
+                }
+                if let Some(role) = &id.role {
+                    l0_entries.push(serde_json::json!({"key": "role", "value": role}));
+                }
+                if let Some(purpose) = &id.vault_purpose {
+                    l0_entries.push(serde_json::json!({"key": "vault_purpose", "value": purpose}));
+                }
+                let l1 = store.get_identity_facts(1)?;
+                let result = serde_json::json!({
+                    "l0": l0_entries,
+                    "l1": l1.iter().map(|f| serde_json::json!({"key": &f.key, "value": &f.value, "source": &f.source, "updated_at": &f.updated_at})).collect::<Vec<_>>(),
+                });
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            } else {
+                let block = engraph::identity::format_identity_block(&cfg, &store)?;
+                println!("{}", block);
             }
         }
 

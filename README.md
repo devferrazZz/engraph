@@ -21,8 +21,8 @@ engraph turns your markdown vault into a searchable knowledge graph that any AI 
 Plain vector search treats your notes as isolated documents. But knowledge isn't flat — your notes link to each other, share tags, reference the same people and projects. engraph understands these connections.
 
 - **5-lane hybrid search** — semantic embeddings + BM25 full-text + graph expansion + cross-encoder reranking + temporal scoring, fused via [Reciprocal Rank Fusion](https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf). An LLM orchestrator classifies queries and adapts lane weights per intent. Time-aware queries like "what happened last week" or "March 2026 notes" activate the temporal lane automatically.
-- **MCP server for AI agents** — `engraph serve` exposes 22 tools (search, read, section-level editing, frontmatter mutations, vault health, context bundles, note creation, PARA migration) that Claude, Cursor, or any MCP client can call directly.
-- **HTTP REST API** — `engraph serve --http` adds an axum-based HTTP server alongside MCP with 23 REST endpoints, API key authentication, rate limiting, and CORS. Web-based agents and scripts can query your vault with simple `curl` calls.
+- **MCP server for AI agents** — `engraph serve` exposes 25 tools (search, read, section-level editing, frontmatter mutations, vault health, context bundles, note creation, PARA migration, identity) that Claude, Cursor, or any MCP client can call directly.
+- **HTTP REST API** — `engraph serve --http` adds an axum-based HTTP server alongside MCP with 26 REST endpoints, API key authentication, rate limiting, and CORS. Web-based agents and scripts can query your vault with simple `curl` calls.
 - **Section-level editing** — AI agents can read, replace, prepend, or append to specific sections by heading. Full note rewriting with frontmatter preservation. Granular frontmatter mutations (set/remove fields, add/remove tags and aliases).
 - **Vault health diagnostics** — detect orphan notes, broken wikilinks, stale content, and tag hygiene issues. Available as MCP tool and CLI command.
 - **Obsidian CLI integration** — auto-detects running Obsidian and delegates compatible operations. Circuit breaker (Closed/Degraded/Open) ensures graceful fallback.
@@ -61,7 +61,7 @@ Your vault (markdown files)
 │  Search: Orchestrator → 4-lane retrieval    │
 │          → Reranker → Two-pass RRF fusion   │
 │                                             │
-│  22 MCP tools + 23 REST endpoints           │
+│  25 MCP tools + 26 REST endpoints           │
 └─────────────────────────────────────────────┘
         │
         ▼
@@ -268,7 +268,7 @@ Returns orphan notes (no links in or out), broken wikilinks, stale notes, and ta
 
 `engraph serve --http` adds a full REST API alongside the MCP server, exposing the same capabilities over HTTP for web agents, scripts, and integrations.
 
-**24 endpoints:**
+**26 endpoints:**
 
 | Method | Endpoint | Permission | Description |
 |--------|----------|------------|-------------|
@@ -292,6 +292,8 @@ Returns orphan notes (no links in or out), broken wikilinks, stale notes, and ta
 | POST | `/api/unarchive` | write | Restore archived note |
 | POST | `/api/update-metadata` | write | Update note metadata |
 | POST | `/api/delete` | write | Delete note (soft or hard) |
+| GET | `/api/identity` | read | User identity (L0) and current context (L1) |
+| POST | `/api/setup` | write | First-time onboarding setup (detect/apply modes) |
 | POST | `/api/reindex-file` | write | Re-index a single file after external edits |
 | POST | `/api/migrate/preview` | write | Preview PARA migration (classify + suggest moves) |
 | POST | `/api/migrate/apply` | write | Apply PARA migration (move files) |
@@ -526,7 +528,7 @@ STYLE:
 | Search method | 5-lane RRF (semantic + BM25 + graph + reranker + temporal) | Vector similarity only | Keyword only |
 | Query understanding | LLM orchestrator classifies intent, adapts weights | None | None |
 | Understands note links | Yes (wikilink graph traversal) | No | Limited (backlinks panel) |
-| AI agent access | MCP server (22 tools) + HTTP REST API (23 endpoints) | Custom API needed | No |
+| AI agent access | MCP server (25 tools) + HTTP REST API (26 endpoints) | Custom API needed | No |
 | Write capability | Create/edit/rewrite/delete with smart filing | No | Manual |
 | Vault health | Orphans, broken links, stale notes, tag hygiene | No | Limited |
 | Real-time sync | File watcher, 2s debounce | Manual re-index | N/A |
@@ -543,8 +545,9 @@ engraph is not a replacement for Obsidian — it's the intelligence layer that s
 - LLM research orchestrator: query intent classification + query expansion + adaptive lane weights
 - llama.cpp inference via Rust bindings (GGUF models, Metal GPU on macOS, CUDA on Linux)
 - Intelligence opt-in: heuristic fallback when disabled, LLM-powered when enabled
-- MCP server with 23 tools (8 read, 10 write, 1 index, 1 diagnostic, 3 migrate) via stdio
-- HTTP REST API with 24 endpoints, API key auth (`eg_` prefix), rate limiting, CORS — enabled via `engraph serve --http`
+- MCP server with 25 tools (8 read, 10 write, 2 identity, 1 index, 1 diagnostic, 3 migrate) via stdio
+- HTTP REST API with 26 endpoints, API key auth (`eg_` prefix), rate limiting, CORS — enabled via `engraph serve --http`
+- User identity with L0/L1 tiered context for AI agent session starts
 - Section-level reading and editing: target specific headings with replace/prepend/append modes
 - Full note rewriting with automatic frontmatter preservation
 - Granular frontmatter mutations: set/remove fields, add/remove tags and aliases
@@ -573,7 +576,7 @@ engraph is not a replacement for Obsidian — it's the intelligence layer that s
 - [x] ~~HTTP/REST API — complement MCP with a standard web API~~ (v1.3)
 - [x] ~~PARA migration — AI-assisted vault restructuring with preview/apply/undo~~ (v1.4)
 - [x] ~~ChatGPT Actions — OpenAPI 3.1.0 spec + plugin manifest + `--setup-chatgpt` helper~~ (v1.5)
-- [ ] Identity — user context at session start, enhanced onboarding (v1.6)
+- [x] ~~Identity — user context at session start, enhanced onboarding~~ (v1.6)
 - [ ] Timeline — temporal knowledge graph with point-in-time queries (v1.7)
 - [ ] Mining — automatic fact extraction from vault notes (v1.8)
 

@@ -192,6 +192,18 @@ pub struct ReindexFileParams {
     pub file: String,
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct SetupParams {
+    /// Mode: "detect" to inspect vault, "apply" to configure identity and index.
+    pub mode: String,
+    /// User name (required for apply mode).
+    pub name: Option<String>,
+    /// User role (required for apply mode).
+    pub role: Option<String>,
+    /// Vault purpose (optional for apply mode).
+    pub purpose: Option<String>,
+}
+
 // ---------------------------------------------------------------------------
 // Server
 // ---------------------------------------------------------------------------
@@ -886,6 +898,56 @@ impl EngraphServer {
         });
         to_json_result(&output)
     }
+
+    #[tool(
+        name = "identity",
+        description = "Returns compact user identity and current context. Call at session start for instant context. L0 = static identity (~50 tokens), L1 = dynamic state (~120 tokens)."
+    )]
+    async fn identity(&self) -> Result<CallToolResult, McpError> {
+        let store = self.store.lock().await;
+        let config = crate::config::Config::load().unwrap_or_default();
+        let block =
+            crate::identity::format_identity_block(&config, &store).map_err(|e| mcp_err(&e))?;
+        Ok(CallToolResult::success(vec![Content::text(block)]))
+    }
+
+    #[tool(
+        name = "setup",
+        description = "Run first-time setup or update identity. Use 'detect' mode to inspect the vault without changes, 'apply' mode to configure identity and index. Returns JSON."
+    )]
+    async fn setup(&self, params: Parameters<SetupParams>) -> Result<CallToolResult, McpError> {
+        match params.0.mode.as_str() {
+            "detect" => {
+                let result = crate::onboarding::run_detect_json(&self.vault_path)
+                    .map_err(|e| mcp_err(&e))?;
+                to_json_result(&result)
+            }
+            "apply" => {
+                let mut config = crate::config::Config::load().unwrap_or_default();
+                let data_dir = crate::config::Config::data_dir().map_err(|e| mcp_err(&e))?;
+                let flags = crate::onboarding::ApplyFlags {
+                    name: params.0.name,
+                    role: params.0.role,
+                    purpose: params.0.purpose,
+                    identity_only: false,
+                    reindex_only: false,
+                };
+                let result = crate::onboarding::run_apply_json(
+                    &self.vault_path,
+                    &mut config,
+                    &data_dir,
+                    flags,
+                )
+                .map_err(|e| mcp_err(&e))?;
+                to_json_result(&result)
+            }
+            other => Err(McpError::new(
+                rmcp::model::ErrorCode::INVALID_PARAMS,
+                format!("Unknown mode: {other}. Use 'detect' or 'apply'."),
+                None::<serde_json::Value>,
+            )),
+        }
+    }
 }
 
 #[tool_handler]
@@ -898,6 +960,7 @@ impl rmcp::handler::server::ServerHandler for EngraphServer {
                  edit_frontmatter for tags/properties, update_metadata for bulk tag/alias replacement. \
                  Lifecycle: move_note to relocate, archive to soft-delete, unarchive to restore, delete for permanent removal. \
                  Index: reindex_file to refresh a single file's index after external edits. \
+                 Identity: identity for user context at session start, setup to run first-time onboarding (detect/apply). \
                  Migration: migrate_preview to classify notes into PARA folders, migrate_apply to execute the migration, migrate_undo to revert.",
         )
     }

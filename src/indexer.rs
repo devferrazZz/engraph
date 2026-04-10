@@ -13,6 +13,7 @@ use crate::config::Config;
 use crate::docid::generate_docid;
 use crate::graph::extract_wikilink_targets;
 use crate::llm::EmbedModel;
+use crate::profile::VaultProfile;
 use crate::store::{FileRecord, Store};
 
 /// Summary of an indexing run.
@@ -459,7 +460,15 @@ pub fn run_index(vault_path: &Path, config: &Config, rebuild: bool) -> Result<In
     // Store current dimension for future checks
     store.set_meta("embedding_dim", &model_dim.to_string())?;
 
-    run_index_inner(vault_path, config, &store, &mut embedder, rebuild)
+    let profile = crate::config::Config::load_vault_profile().ok().flatten();
+    run_index_inner(
+        vault_path,
+        config,
+        &store,
+        &mut embedder,
+        rebuild,
+        profile.as_ref(),
+    )
 }
 
 /// Like [`run_index`], but accepts shared `Store` and `Embedder` references.
@@ -472,8 +481,9 @@ pub fn run_index_shared(
     store: &Store,
     embedder: &mut impl EmbedModel,
     rebuild: bool,
+    profile: Option<&VaultProfile>,
 ) -> Result<IndexResult> {
-    run_index_inner(vault_path, config, store, embedder, rebuild)
+    run_index_inner(vault_path, config, store, embedder, rebuild, profile)
 }
 
 /// Shared implementation for [`run_index`] and [`run_index_shared`].
@@ -483,6 +493,7 @@ fn run_index_inner(
     store: &Store,
     embedder: &mut impl EmbedModel,
     rebuild: bool,
+    profile: Option<&VaultProfile>,
 ) -> Result<IndexResult> {
     let start = Instant::now();
 
@@ -498,8 +509,8 @@ fn run_index_inner(
 
     // Build exclude list: config excludes + archive folder (if detected)
     let mut exclude = config.exclude.clone();
-    if let Ok(Some(profile)) = crate::config::Config::load_vault_profile()
-        && let Some(archive) = &profile.structure.folders.archive
+    if let Some(p) = profile
+        && let Some(archive) = &p.structure.folders.archive
     {
         let archive_pattern = format!("{}/", archive);
         if !exclude.contains(&archive_pattern) {
@@ -599,8 +610,8 @@ fn run_index_inner(
     }
 
     // People detection (if configured via vault profile)
-    if let Ok(Some(profile)) = crate::config::Config::load_vault_profile()
-        && let Some(people_folder) = &profile.structure.folders.people
+    if let Some(p) = profile
+        && let Some(people_folder) = &p.structure.folders.people
     {
         let people = load_people_entities(store, people_folder, &content_by_path)?;
         if !people.is_empty() {
@@ -661,6 +672,13 @@ fn run_index_inner(
             *val /= n;
         }
         store.upsert_folder_centroid(folder, &centroid, vectors.len())?;
+    }
+
+    // Extract L1 identity facts from the freshly indexed vault
+    if let Some(p) = profile
+        && let Err(e) = crate::identity::extract_l1_facts(store, p)
+    {
+        tracing::warn!("L1 identity extraction failed (non-fatal): {e:#}");
     }
 
     let duration = start.elapsed();

@@ -1280,6 +1280,7 @@ async fn main() -> Result<()> {
                         tags,
                         folder,
                         created_by: "cli".into(),
+                        auto_link: None,
                     };
                     let result = engraph::writer::create_note(
                         input,

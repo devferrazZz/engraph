@@ -25,6 +25,7 @@ pub struct CreateNoteInput {
     pub tags: Vec<String>,
     pub folder: Option<String>,
     pub created_by: String,
+    pub auto_link: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -512,17 +513,21 @@ pub fn create_note(
     // Step 2: Resolve tags
     let resolved_tags = store.resolve_tags(&input.tags)?;
 
-    // Step 3: Discover links and apply them
+    // Step 3: Discover links and apply them (unless auto_link is explicitly false)
     let people_folder = profile.and_then(|p| p.structure.folders.people.as_deref());
     let discovered = links::discover_links(store, &input.content, vault_path, people_folder)?;
 
     // Split discovered links into auto-apply and suggestion-only
-    let (auto_apply, suggestions): (Vec<_>, Vec<_>) =
+    let (auto_apply, suggestions): (Vec<_>, Vec<_>) = if input.auto_link.unwrap_or(true) {
         discovered.into_iter().partition(|l| match &l.match_type {
             links::LinkMatchType::ExactName | links::LinkMatchType::Alias => true,
             links::LinkMatchType::FuzzyName { confidence_bp } => *confidence_bp >= 920,
             links::LinkMatchType::FirstName { .. } => false,
-        });
+        })
+    } else {
+        // auto_link disabled: all discovered links go to suggestions only
+        (Vec::new(), discovered)
+    };
 
     let links_added: Vec<String> = auto_apply.iter().map(|l| l.target_path.clone()).collect();
     let links_suggested: Vec<String> = suggestions

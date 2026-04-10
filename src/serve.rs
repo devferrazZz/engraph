@@ -83,6 +83,8 @@ pub struct CreateParams {
     pub tags: Option<Vec<String>>,
     /// Explicit folder path (skips placement engine).
     pub folder: Option<String>,
+    /// Set to false to skip automatic wikilink resolution. Defaults to true.
+    pub auto_link: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -184,6 +186,12 @@ pub struct DeleteParams {
     pub mode: Option<String>,
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct ReindexFileParams {
+    /// File path relative to vault root (e.g. "07-Daily/2026-04-10.md").
+    pub file: String,
+}
+
 // ---------------------------------------------------------------------------
 // Server
 // ---------------------------------------------------------------------------
@@ -198,6 +206,7 @@ pub struct EngraphServer {
     embedder: Arc<Mutex<Box<dyn EmbedModel + Send>>>,
     vault_path: Arc<PathBuf>,
     profile: Arc<Option<VaultProfile>>,
+    #[allow(dead_code)] // Required by rmcp #[tool_router] macro infrastructure
     tool_router: ToolRouter<Self>,
     /// Query expansion orchestrator (None when intelligence is disabled or failed to load).
     orchestrator: Option<Arc<Mutex<Box<dyn OrchestratorModel + Send>>>>,
@@ -512,6 +521,7 @@ impl EngraphServer {
             tags: params.0.tags.unwrap_or_default(),
             folder: params.0.folder,
             created_by: "claude-code".into(),
+            auto_link: params.0.auto_link,
         };
         let result = crate::writer::create_note(
             input,
@@ -818,6 +828,64 @@ impl EngraphServer {
         });
         to_json_result(&result)
     }
+
+    #[tool(
+        name = "reindex_file",
+        description = "Re-index a single file after external edits. Reads the file from disk, re-embeds its chunks, and updates the search index. Use when a file was modified outside engraph and you need the index to reflect current content."
+    )]
+    async fn reindex_file(
+        &self,
+        params: Parameters<ReindexFileParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let store = self.store.lock().await;
+        let mut embedder = self.embedder.lock().await;
+        let rel_path = params.0.file;
+        let full_path = self.vault_path.join(&rel_path);
+
+        // Read file content from disk
+        let content = std::fs::read_to_string(&full_path).map_err(|e| {
+            McpError::new(
+                rmcp::model::ErrorCode::INVALID_PARAMS,
+                format!("Cannot read file {rel_path}: {e}"),
+                None::<serde_json::Value>,
+            )
+        })?;
+
+        let content_hash = {
+            use sha2::{Digest, Sha256};
+            let mut hasher = Sha256::new();
+            hasher.update(content.as_bytes());
+            format!("{:x}", hasher.finalize())
+        };
+
+        let config = crate::config::Config::load().unwrap_or_default();
+
+        // Re-index the file (handles cleanup of old entries automatically)
+        let result = crate::indexer::index_file(
+            &rel_path,
+            &content,
+            &content_hash,
+            &store,
+            &mut *embedder,
+            &self.vault_path,
+            &config,
+        )
+        .map_err(|e| mcp_err(&e))?;
+
+        // Rebuild edges for the re-indexed file
+        store
+            .delete_edges_for_file(result.file_id)
+            .map_err(|e| mcp_err(&e))?;
+        crate::indexer::build_edges_for_file(&store, result.file_id, &content)
+            .map_err(|e| mcp_err(&e))?;
+
+        let output = serde_json::json!({
+            "file": rel_path,
+            "chunks": result.total_chunks,
+            "docid": result.docid,
+        });
+        to_json_result(&output)
+    }
 }
 
 #[tool_handler]
@@ -829,6 +897,7 @@ impl rmcp::handler::server::ServerHandler for EngraphServer {
                  Write: create for new notes, append to add content, edit to modify a section, rewrite to replace body, \
                  edit_frontmatter for tags/properties, update_metadata for bulk tag/alias replacement. \
                  Lifecycle: move_note to relocate, archive to soft-delete, unarchive to restore, delete for permanent removal. \
+                 Index: reindex_file to refresh a single file's index after external edits. \
                  Migration: migrate_preview to classify notes into PARA folders, migrate_apply to execute the migration, migrate_undo to revert.",
         )
     }

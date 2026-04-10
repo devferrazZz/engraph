@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.5.5 — Housekeeping (2026-04-10)
+
+### Added
+- **`auto_link` parameter** on `create` — set to `false` to skip automatic wikilink resolution. Applies to MCP, HTTP, and CLI. Discovered links still appear as suggestions in the response.
+- **`reindex_file` MCP tool + HTTP endpoint** — re-indexes a single file after external edits. Reads from disk, re-embeds chunks, rebuilds edges. Available as MCP tool, `POST /api/reindex-file`, and OpenAPI operation.
+
+### Changed
+- **rmcp** bumped from 1.2.0 to 1.4.0 — host validation, non-Send handler support, transport fixes. Does not yet fix [#20](https://github.com/devwhodevs/engraph/issues/20) (protocol `2025-11-25` needed for Claude Desktop Cowork/Code modes — blocked upstream on [modelcontextprotocol/rust-sdk#800](https://github.com/modelcontextprotocol/rust-sdk/issues/800)).
+- MCP tools: 22 → 23
+- HTTP endpoints: 23 → 24
+- OpenAPI version: 1.5.0 → 1.5.5
+
 ## v1.5.0 — ChatGPT Actions (2026-03-26)
 
 ### Added

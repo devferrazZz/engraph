@@ -65,6 +65,7 @@ fn test_create_note_is_immediately_searchable() {
         tags: vec!["engraph".into(), "search".into()],
         folder: Some("00-Inbox".into()),
         created_by: "test".into(),
+        auto_link: None,
     };
 
     let result = create_note(input, &store, &mut embedder, vault_dir.path(), None).unwrap();
@@ -103,6 +104,7 @@ fn test_append_updates_index() {
         tags: vec![],
         folder: Some("00-Inbox".into()),
         created_by: "test".into(),
+        auto_link: None,
     };
     let created = create_note(input, &store, &mut embedder, vault_dir.path(), None).unwrap();
 
@@ -136,6 +138,7 @@ fn test_conflict_detection() {
         tags: vec![],
         folder: Some("00-Inbox".into()),
         created_by: "test".into(),
+        auto_link: None,
     };
     let created = create_note(input, &store, &mut embedder, vault_dir.path(), None).unwrap();
 

@@ -1,6 +1,6 @@
 [package]
 name = "engraph"
-version = "1.5.5"
+version = "1.6.0"
 edition = "2024"
 description = "Local knowledge graph for AI agents. Hybrid search + MCP server for Obsidian vaults."
 license = "MIT"
@@ -25,6 +25,9 @@ tokenizers = { version = "0.22", default-features = false, features = ["fancy-re
 sha2 = "0.10"
 ureq = "2.12"
 indicatif = "0.17"
+dialoguer = "0.12"
+console = "0.16"
+regex = "1"
 sqlite-vec = "0.1.8-alpha.1"
 zerocopy = { version = "0.7", features = ["derive"] }
 rayon = "1"

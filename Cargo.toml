@@ -1,6 +1,6 @@
 [package]
 name = "engraph"
-version = "1.5.4"
+version = "1.5.5"
 edition = "2024"
 description = "Local knowledge graph for AI agents. Hybrid search + MCP server for Obsidian vaults."
 license = "MIT"
@@ -31,7 +31,7 @@ rayon = "1"
 time = { version = "0.3", features = ["parsing", "formatting", "macros"] }
 strsim = "0.11"
 ignore = "0.4"
-rmcp = { version = "1.2", features = ["transport-io"] }
+rmcp = { version = "1.4", features = ["transport-io"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "time", "net"] }
 notify = "7.0"
 notify-debouncer-full = "0.4"

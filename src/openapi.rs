@@ -27,6 +27,7 @@ pub fn build_openapi_spec(server_url: &str) -> serde_json::Value {
     paths.insert("/api/unarchive".into(), build_unarchive());
     paths.insert("/api/update-metadata".into(), build_update_metadata());
     paths.insert("/api/delete".into(), build_delete());
+    paths.insert("/api/reindex-file".into(), build_reindex_file());
 
     // Migration endpoints
     paths.insert("/api/migrate/preview".into(), build_migrate_preview());
@@ -37,7 +38,7 @@ pub fn build_openapi_spec(server_url: &str) -> serde_json::Value {
         "openapi": "3.1.0",
         "info": {
             "title": "engraph",
-            "version": "1.5.0",
+            "version": "1.5.5",
             "description": "AI-powered semantic search and management API for Obsidian vaults."
         },
         "servers": [{ "url": server_url }],
@@ -220,7 +221,8 @@ fn build_create() -> serde_json::Value {
                         "filename": { "type": "string", "description": "Filename without .md" },
                         "type_hint": { "type": "string", "description": "Type hint for placement" },
                         "tags": { "type": "array", "items": { "type": "string" }, "description": "Tags to apply" },
-                        "folder": { "type": "string", "description": "Explicit folder (skips auto-placement)" }
+                        "folder": { "type": "string", "description": "Explicit folder (skips auto-placement)" },
+                        "auto_link": { "type": "boolean", "description": "Set to false to skip automatic wikilink resolution. Defaults to true." }
                     }
                 }}}
             },
@@ -424,6 +426,26 @@ fn build_delete() -> serde_json::Value {
                 }}}
             },
             "responses": { "200": { "description": "Deletion confirmation" } }
+        }
+    })
+}
+
+fn build_reindex_file() -> serde_json::Value {
+    serde_json::json!({
+        "post": {
+            "operationId": "reindexFile",
+            "summary": "Re-index a single file after external edits. Re-reads, re-embeds, and updates search index.",
+            "requestBody": {
+                "required": true,
+                "content": { "application/json": { "schema": {
+                    "type": "object",
+                    "required": ["file"],
+                    "properties": {
+                        "file": { "type": "string", "description": "File path relative to vault root" }
+                    }
+                }}}
+            },
+            "responses": { "200": { "description": "Re-indexed file info (chunks, docid)" } }
         }
     })
 }

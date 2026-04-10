@@ -268,7 +268,7 @@ Returns orphan notes (no links in or out), broken wikilinks, stale notes, and ta
 
 `engraph serve --http` adds a full REST API alongside the MCP server, exposing the same capabilities over HTTP for web agents, scripts, and integrations.
 
-**23 endpoints:**
+**24 endpoints:**
 
 | Method | Endpoint | Permission | Description |
 |--------|----------|------------|-------------|
@@ -292,6 +292,7 @@ Returns orphan notes (no links in or out), broken wikilinks, stale notes, and ta
 | POST | `/api/unarchive` | write | Restore archived note |
 | POST | `/api/update-metadata` | write | Update note metadata |
 | POST | `/api/delete` | write | Delete note (soft or hard) |
+| POST | `/api/reindex-file` | write | Re-index a single file after external edits |
 | POST | `/api/migrate/preview` | write | Preview PARA migration (classify + suggest moves) |
 | POST | `/api/migrate/apply` | write | Apply PARA migration (move files) |
 | POST | `/api/migrate/undo` | write | Undo last PARA migration |
@@ -542,8 +543,8 @@ engraph is not a replacement for Obsidian — it's the intelligence layer that s
 - LLM research orchestrator: query intent classification + query expansion + adaptive lane weights
 - llama.cpp inference via Rust bindings (GGUF models, Metal GPU on macOS, CUDA on Linux)
 - Intelligence opt-in: heuristic fallback when disabled, LLM-powered when enabled
-- MCP server with 22 tools (8 read, 10 write, 1 diagnostic, 3 migrate) via stdio
-- HTTP REST API with 23 endpoints, API key auth (`eg_` prefix), rate limiting, CORS — enabled via `engraph serve --http`
+- MCP server with 23 tools (8 read, 10 write, 1 index, 1 diagnostic, 3 migrate) via stdio
+- HTTP REST API with 24 endpoints, API key auth (`eg_` prefix), rate limiting, CORS — enabled via `engraph serve --http`
 - Section-level reading and editing: target specific headings with replace/prepend/append modes
 - Full note rewriting with automatic frontmatter preservation
 - Granular frontmatter mutations: set/remove fields, add/remove tags and aliases
@@ -572,7 +573,9 @@ engraph is not a replacement for Obsidian — it's the intelligence layer that s
 - [x] ~~HTTP/REST API — complement MCP with a standard web API~~ (v1.3)
 - [x] ~~PARA migration — AI-assisted vault restructuring with preview/apply/undo~~ (v1.4)
 - [x] ~~ChatGPT Actions — OpenAPI 3.1.0 spec + plugin manifest + `--setup-chatgpt` helper~~ (v1.5)
-- [ ] Multi-vault — search across multiple vaults (v1.6)
+- [ ] Identity — user context at session start, enhanced onboarding (v1.6)
+- [ ] Timeline — temporal knowledge graph with point-in-time queries (v1.7)
+- [ ] Mining — automatic fact extraction from vault notes (v1.8)
 
 ## Configuration
 

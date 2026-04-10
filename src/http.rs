@@ -268,6 +268,7 @@ struct CreateBody {
     #[serde(default)]
     tags: Vec<String>,
     folder: Option<String>,
+    auto_link: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -326,6 +327,11 @@ struct DeleteBody {
     mode: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct ReindexFileBody {
+    file: String,
+}
+
 // ---------------------------------------------------------------------------
 // CORS
 // ---------------------------------------------------------------------------
@@ -380,6 +386,8 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/api/unarchive", post(handle_unarchive))
         .route("/api/update-metadata", post(handle_update_metadata))
         .route("/api/delete", post(handle_delete))
+        // Index maintenance
+        .route("/api/reindex-file", post(handle_reindex_file))
         // Migration endpoints
         .route("/api/migrate/preview", post(handle_migrate_preview))
         .route("/api/migrate/apply", post(handle_migrate_apply))
@@ -712,6 +720,7 @@ async fn handle_create(
         tags: body.tags,
         folder: body.folder,
         created_by: "http-api".into(),
+        auto_link: body.auto_link,
     };
     let result = writer::create_note(
         input,
@@ -1008,6 +1017,52 @@ async fn handle_delete(
     Ok(Json(serde_json::json!({
         "deleted": body.file,
         "mode": body.mode.as_deref().unwrap_or("soft"),
+    })))
+}
+
+async fn handle_reindex_file(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Json(body): Json<ReindexFileBody>,
+) -> Result<impl IntoResponse, ApiError> {
+    authorize(&headers, &state, true)?;
+    let store = state.store.lock().await;
+    let mut embedder = state.embedder.lock().await;
+    let full_path = state.vault_path.join(&body.file);
+
+    let content = std::fs::read_to_string(&full_path)
+        .map_err(|e| ApiError::internal(&format!("Cannot read file {}: {e}", body.file)))?;
+
+    let content_hash = {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(content.as_bytes());
+        format!("{:x}", hasher.finalize())
+    };
+
+    let config = crate::config::Config::load().unwrap_or_default();
+
+    let result = crate::indexer::index_file(
+        &body.file,
+        &content,
+        &content_hash,
+        &store,
+        &mut *embedder,
+        &state.vault_path,
+        &config,
+    )
+    .map_err(|e| ApiError::internal(&format!("{e:#}")))?;
+
+    store
+        .delete_edges_for_file(result.file_id)
+        .map_err(|e| ApiError::internal(&format!("{e:#}")))?;
+    crate::indexer::build_edges_for_file(&store, result.file_id, &content)
+        .map_err(|e| ApiError::internal(&format!("{e:#}")))?;
+
+    Ok(Json(serde_json::json!({
+        "file": body.file,
+        "chunks": result.total_chunks,
+        "docid": result.docid,
     })))
 }
 

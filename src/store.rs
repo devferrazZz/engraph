@@ -1677,8 +1677,10 @@ impl Store {
     }
 
     pub fn clear_identity_facts(&self, tier: i64) -> Result<()> {
-        self.conn
-            .execute("DELETE FROM identity_facts WHERE tier = ?1", rusqlite::params![tier])?;
+        self.conn.execute(
+            "DELETE FROM identity_facts WHERE tier = ?1",
+            rusqlite::params![tier],
+        )?;
         Ok(())
     }
 
@@ -3597,9 +3599,15 @@ mod tests {
     #[test]
     fn test_insert_and_get_identity_facts() {
         let store = Store::open_memory().unwrap();
-        store.upsert_identity_fact(0, "name", "Test User", None).unwrap();
-        store.upsert_identity_fact(1, "active_project", "Project A", Some("01-Projects/a.md")).unwrap();
-        store.upsert_identity_fact(1, "active_project", "Project B", Some("01-Projects/b.md")).unwrap();
+        store
+            .upsert_identity_fact(0, "name", "Test User", None)
+            .unwrap();
+        store
+            .upsert_identity_fact(1, "active_project", "Project A", Some("01-Projects/a.md"))
+            .unwrap();
+        store
+            .upsert_identity_fact(1, "active_project", "Project B", Some("01-Projects/b.md"))
+            .unwrap();
 
         let l0 = store.get_identity_facts(0).unwrap();
         assert_eq!(l0.len(), 1);
@@ -3613,8 +3621,12 @@ mod tests {
     #[test]
     fn test_upsert_identity_fact_replaces() {
         let store = Store::open_memory().unwrap();
-        store.upsert_identity_fact(0, "name", "Old Name", None).unwrap();
-        store.upsert_identity_fact(0, "name", "New Name", None).unwrap();
+        store
+            .upsert_identity_fact(0, "name", "Old Name", None)
+            .unwrap();
+        store
+            .upsert_identity_fact(0, "name", "New Name", None)
+            .unwrap();
 
         let facts = store.get_identity_facts(0).unwrap();
         assert_eq!(facts.len(), 2); // Different values = different rows
@@ -3624,7 +3636,9 @@ mod tests {
     fn test_clear_identity_facts_by_tier() {
         let store = Store::open_memory().unwrap();
         store.upsert_identity_fact(0, "name", "User", None).unwrap();
-        store.upsert_identity_fact(1, "active_project", "P1", None).unwrap();
+        store
+            .upsert_identity_fact(1, "active_project", "P1", None)
+            .unwrap();
         store.clear_identity_facts(1).unwrap();
 
         assert_eq!(store.get_identity_facts(0).unwrap().len(), 1);

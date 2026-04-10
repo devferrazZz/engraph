@@ -5,8 +5,8 @@ use console::style;
 use serde_json::json;
 
 use crate::config::Config;
-use crate::identity::{extract_l1_facts, L1Summary};
-use crate::indexer::{run_index, IndexResult};
+use crate::identity::{L1Summary, extract_l1_facts};
+use crate::indexer::{IndexResult, run_index};
 use crate::profile::{
     self, FolderMap, StructureDetection, StructureMethod, VaultProfile, VaultStats, VaultType,
 };
@@ -65,32 +65,15 @@ fn print_banner() {
     let sub = "vault intelligence for AI agents";
     let inner_width = tag.len().max(sub.len()) + 4;
 
-    let top = format!(
-        "  {}{}{}",
-        "╭",
-        "─".repeat(inner_width + 2),
-        "╮"
-    );
-    let bot = format!(
-        "  {}{}{}",
-        "╰",
-        "─".repeat(inner_width + 2),
-        "╯"
-    );
-    let empty_line = format!(
-        "  │{}│",
-        " ".repeat(inner_width + 2)
-    );
+    let top = format!("  {}{}{}", "╭", "─".repeat(inner_width + 2), "╮");
+    let bot = format!("  {}{}{}", "╰", "─".repeat(inner_width + 2), "╯");
+    let empty_line = format!("  │{}│", " ".repeat(inner_width + 2));
     let tag_line = format!(
         "  │  {:<width$}  │",
         style(&tag).bold(),
         width = inner_width
     );
-    let sub_line = format!(
-        "  │  {:<width$}  │",
-        style(sub).dim(),
-        width = inner_width
-    );
+    let sub_line = format!("  │  {:<width$}  │", style(sub).dim(), width = inner_width);
 
     println!();
     println!("{}", top);
@@ -111,11 +94,7 @@ fn git_user_name() -> Option<String> {
         .and_then(|out| {
             if out.status.success() {
                 let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                if name.is_empty() {
-                    None
-                } else {
-                    Some(name)
-                }
+                if name.is_empty() { None } else { Some(name) }
             } else {
                 None
             }
@@ -215,13 +194,13 @@ fn print_l1_summary(summary: &L1Summary) {
         println!("  {} key people", style(summary.key_people).cyan());
     }
     if summary.current_focus > 0 {
-        println!("  {} current focus items", style(summary.current_focus).cyan());
+        println!(
+            "  {} current focus items",
+            style(summary.current_focus).cyan()
+        );
     }
     if summary.blocking > 0 {
-        println!(
-            "  {} blocking items",
-            style(summary.blocking).yellow()
-        );
+        println!("  {} blocking items", style(summary.blocking).yellow());
     }
     if summary.ooo > 0 {
         println!("  {} people OOO", style(summary.ooo).yellow());
@@ -256,18 +235,9 @@ fn print_next_steps(config_path: &Path) {
     check(&format!("Identity saved to {}", config_path.display()));
     println!();
     println!("  Try these:");
-    println!(
-        "    {}",
-        style("engraph search \"...\"").cyan()
-    );
-    println!(
-        "    {}",
-        style("engraph identity").cyan()
-    );
-    println!(
-        "    {}",
-        style("engraph serve").cyan()
-    );
+    println!("    {}", style("engraph search \"...\"").cyan());
+    println!("    {}", style("engraph identity").cyan());
+    println!("    {}", style("engraph serve").cyan());
     println!();
 }
 
@@ -290,10 +260,7 @@ pub fn run_interactive(
     // ── Vault Scan ──
     let (vault_type, structure, stats) = if !flags.identity_only {
         if !quiet {
-            println!(
-                "  {}",
-                style("Scanning vault...").dim()
-            );
+            println!("  {}", style("Scanning vault...").dim());
             println!();
         }
 
@@ -327,8 +294,7 @@ pub fn run_interactive(
             n.clone()
         } else {
             let default_name = git_user_name().unwrap_or_default();
-            let mut input = dialoguer::Input::<String>::new()
-                .with_prompt("  ? What's your name?");
+            let mut input = dialoguer::Input::<String>::new().with_prompt("  ? What's your name?");
             if !default_name.is_empty() {
                 input = input.default(default_name);
             }
@@ -374,8 +340,7 @@ pub fn run_interactive(
     // ── Vault Profile ──
     if !flags.identity_only {
         let vault_profile = build_profile(vault_path, vault_type, structure, stats);
-        profile::write_vault_toml(&vault_profile, data_dir)
-            .context("writing vault profile")?;
+        profile::write_vault_toml(&vault_profile, data_dir).context("writing vault profile")?;
     }
 
     // ── Indexing ──
@@ -391,10 +356,7 @@ pub fn run_interactive(
                 .unwrap_or(0);
             if total > 500 {
                 let confirm = dialoguer::Confirm::new()
-                    .with_prompt(format!(
-                        "  {} files found. Ready to index?",
-                        total
-                    ))
+                    .with_prompt(format!("  {} files found. Ready to index?", total))
                     .default(true)
                     .interact()?;
                 if !confirm {
@@ -433,11 +395,7 @@ pub fn run_interactive(
                     }
                     Err(e) => {
                         if !quiet {
-                            println!(
-                                "  {} L1 extraction: {}",
-                                style("!").yellow(),
-                                e
-                            );
+                            println!("  {} L1 extraction: {}", style("!").yellow(), e);
                         }
                     }
                 }
@@ -540,7 +498,8 @@ pub fn run_detect_json(vault_path: &Path) -> Result<serde_json::Value> {
         warnings.push("Vault contains no markdown files".into());
     }
     if stats.files_with_frontmatter == 0 && stats.total_files > 0 {
-        warnings.push("No files have YAML frontmatter — tags and metadata won't be extracted".into());
+        warnings
+            .push("No files have YAML frontmatter — tags and metadata won't be extracted".into());
     }
     if stats.wikilink_count == 0 && stats.total_files > 5 {
         warnings.push("No wikilinks found — graph features will be limited".into());
@@ -746,10 +705,7 @@ fn count_md_files_in_dir(dir: &Path) -> usize {
                 .filter_map(|e| e.ok())
                 .filter(|e| {
                     e.file_type().map(|ft| ft.is_file()).unwrap_or(false)
-                        && e.path()
-                            .extension()
-                            .map(|ext| ext == "md")
-                            .unwrap_or(false)
+                        && e.path().extension().map(|ext| ext == "md").unwrap_or(false)
                 })
                 .count()
         })

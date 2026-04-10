@@ -548,7 +548,17 @@ async fn main() -> Result<()> {
             }
         }
 
-        Command::Init { path, identity, reindex, detect, json, quiet, name, role, purpose } => {
+        Command::Init {
+            path,
+            identity,
+            reindex,
+            detect,
+            json,
+            quiet,
+            name,
+            role,
+            purpose,
+        } => {
             cfg.merge_vault_path(path);
             let vault_path = match &cfg.vault_path {
                 Some(p) => p.clone(),
@@ -558,27 +568,28 @@ async fn main() -> Result<()> {
 
             if detect {
                 let result = engraph::onboarding::run_detect_json(&vault_path)?;
-                if json {
-                    println!("{}", serde_json::to_string_pretty(&result)?);
-                } else {
-                    println!("{}", serde_json::to_string_pretty(&result)?);
-                }
+                println!("{}", serde_json::to_string_pretty(&result)?);
                 return Ok(());
             }
 
             if json {
                 let flags = engraph::onboarding::ApplyFlags {
-                    name, role, purpose,
+                    name,
+                    role,
+                    purpose,
                     identity_only: identity,
                     reindex_only: reindex,
                 };
-                let result = engraph::onboarding::run_apply_json(&vault_path, &mut cfg, &data_dir, flags)?;
+                let result =
+                    engraph::onboarding::run_apply_json(&vault_path, &mut cfg, &data_dir, flags)?;
                 println!("{}", serde_json::to_string_pretty(&result)?);
                 return Ok(());
             }
 
             let flags = engraph::onboarding::InteractiveFlags {
-                name, role, purpose,
+                name,
+                role,
+                purpose,
                 identity_only: identity,
                 reindex_only: reindex,
                 quiet,

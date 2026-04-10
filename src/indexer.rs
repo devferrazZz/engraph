@@ -461,7 +461,14 @@ pub fn run_index(vault_path: &Path, config: &Config, rebuild: bool) -> Result<In
     store.set_meta("embedding_dim", &model_dim.to_string())?;
 
     let profile = crate::config::Config::load_vault_profile().ok().flatten();
-    run_index_inner(vault_path, config, &store, &mut embedder, rebuild, profile.as_ref())
+    run_index_inner(
+        vault_path,
+        config,
+        &store,
+        &mut embedder,
+        rebuild,
+        profile.as_ref(),
+    )
 }
 
 /// Like [`run_index`], but accepts shared `Store` and `Embedder` references.
@@ -668,10 +675,10 @@ fn run_index_inner(
     }
 
     // Extract L1 identity facts from the freshly indexed vault
-    if let Some(p) = profile {
-        if let Err(e) = crate::identity::extract_l1_facts(store, p) {
-            tracing::warn!("L1 identity extraction failed (non-fatal): {e:#}");
-        }
+    if let Some(p) = profile
+        && let Err(e) = crate::identity::extract_l1_facts(store, p)
+    {
+        tracing::warn!("L1 identity extraction failed (non-fatal): {e:#}");
     }
 
     let duration = start.elapsed();

@@ -1116,13 +1116,9 @@ async fn handle_setup(
                 identity_only: false,
                 reindex_only: false,
             };
-            let result = crate::onboarding::run_apply_json(
-                &state.vault_path,
-                &mut config,
-                &data_dir,
-                flags,
-            )
-            .map_err(|e| ApiError::internal(&format!("{e:#}")))?;
+            let result =
+                crate::onboarding::run_apply_json(&state.vault_path, &mut config, &data_dir, flags)
+                    .map_err(|e| ApiError::internal(&format!("{e:#}")))?;
             Ok(Json(result))
         }
         other => Err(ApiError::bad_request(&format!(

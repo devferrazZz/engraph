@@ -71,19 +71,18 @@ pub fn extract_l1_facts(store: &Store, profile: &VaultProfile) -> Result<L1Summa
         daily_files.sort_by(|a, b| b.note_date.cmp(&a.note_date));
 
         // ── Current focus (most recent daily note) ──────────────
-        if let Some(latest) = daily_files.first() {
-            if let Ok(chunks) = store.get_chunks_by_file(latest.id) {
-                let focus_re =
-                    Regex::new(r"(?i)morning\s+focus|top\s+priorit|priorities").unwrap();
-                for chunk in &chunks {
-                    if focus_re.is_match(&chunk.heading) {
-                        let items = extract_bullet_items(&chunk.snippet, 3);
-                        for item in items {
-                            store.upsert_identity_fact(1, "current_focus", &item, None)?;
-                            summary.current_focus += 1;
-                        }
-                        break;
+        if let Some(latest) = daily_files.first()
+            && let Ok(chunks) = store.get_chunks_by_file(latest.id)
+        {
+            let focus_re = Regex::new(r"(?i)morning\s+focus|top\s+priorit|priorities").unwrap();
+            for chunk in &chunks {
+                if focus_re.is_match(&chunk.heading) {
+                    let items = extract_bullet_items(&chunk.snippet, 3);
+                    for item in items {
+                        store.upsert_identity_fact(1, "current_focus", &item, None)?;
+                        summary.current_focus += 1;
                     }
+                    break;
                 }
             }
         }
@@ -171,7 +170,10 @@ pub fn format_identity_block(config: &Config, store: &Store) -> Result<String> {
         .max()
         .unwrap_or("unknown");
 
-    out.push_str(&format!("\n## Current State (L1) [updated {}]\n", latest_ts));
+    out.push_str(&format!(
+        "\n## Current State (L1) [updated {}]\n",
+        latest_ts
+    ));
 
     // Group facts by key.
     let project_vals: Vec<&str> = facts
@@ -343,13 +345,28 @@ mod tests {
 
         // Insert L1 facts manually.
         store
-            .upsert_identity_fact(1, "active_project", "ProjectA", Some("01-Projects/ProjectA.md"))
+            .upsert_identity_fact(
+                1,
+                "active_project",
+                "ProjectA",
+                Some("01-Projects/ProjectA.md"),
+            )
             .unwrap();
         store
-            .upsert_identity_fact(1, "active_project", "ProjectB", Some("01-Projects/ProjectB.md"))
+            .upsert_identity_fact(
+                1,
+                "active_project",
+                "ProjectB",
+                Some("01-Projects/ProjectB.md"),
+            )
             .unwrap();
         store
-            .upsert_identity_fact(1, "key_person", "Alice", Some("03-Resources/People/Alice.md"))
+            .upsert_identity_fact(
+                1,
+                "key_person",
+                "Alice",
+                Some("03-Resources/People/Alice.md"),
+            )
             .unwrap();
         store
             .upsert_identity_fact(1, "current_focus", "Ship feature X", None)

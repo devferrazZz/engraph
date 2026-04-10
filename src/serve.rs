@@ -906,8 +906,8 @@ impl EngraphServer {
     async fn identity(&self) -> Result<CallToolResult, McpError> {
         let store = self.store.lock().await;
         let config = crate::config::Config::load().unwrap_or_default();
-        let block = crate::identity::format_identity_block(&config, &store)
-            .map_err(|e| mcp_err(&e))?;
+        let block =
+            crate::identity::format_identity_block(&config, &store).map_err(|e| mcp_err(&e))?;
         Ok(CallToolResult::success(vec![Content::text(block)]))
     }
 

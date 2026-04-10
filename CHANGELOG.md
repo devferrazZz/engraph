@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.6.0 — Onboarding + Identity (2026-04-10)
+
+### Added
+- **Interactive onboarding** (`engraph init`) — polished CLI with welcome banner, vault scan checkmarks, identity prompts via dialoguer, progress bars, actionable next steps
+- **Agent onboarding** — `engraph init --detect --json` for vault inspection, `--json` for non-interactive apply. Two-phase detect → apply flow for AI agents.
+- **`identity` MCP tool + CLI + HTTP** — returns compact L0/L1 identity block (~170 tokens) for AI session context
+- **`setup` MCP tool + HTTP** — first-time setup from inside an MCP session (detect/apply modes)
+- **`identity_facts` table** — SQLite storage for L0 (static identity) and L1 (dynamic context) facts
+- **L1 auto-extraction** — active projects, key people, current focus, OOO status, blocking items extracted during `engraph index`
+- **`engraph identity --refresh`** — re-extract L1 facts without full reindex
+- **`[identity]` config section** — name, role, vault_purpose in config.toml
+- **`[memory]` config section** — feature flags for identity/timeline/mining
+
+### Changed
+- MCP tools: 23 → 25
+- HTTP endpoints: 24 → 26
+- Dependencies: +dialoguer 0.12, +console 0.16, +regex 1
+
 ## v1.5.5 — Housekeeping (2026-04-10)
 
 ### Added

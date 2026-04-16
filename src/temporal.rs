@@ -276,6 +276,9 @@ fn find_iso_date_in_query(query: &str) -> Option<(i64, i64)> {
         return None;
     }
     for i in 0..=bytes.len() - 10 {
+        if !query.is_char_boundary(i) || !query.is_char_boundary(i + 10) {
+            continue;
+        }
         let candidate = &query[i..i + 10];
         if candidate.as_bytes()[4] == b'-'
             && candidate.as_bytes()[7] == b'-'

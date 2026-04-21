@@ -95,7 +95,7 @@ pub(crate) fn build_name_index(store: &Store, vault_path: &Path) -> Result<Vec<N
     }
 
     // Sort by name length descending — match longer names first
-    entries.sort_by(|a, b| b.name.len().cmp(&a.name.len()));
+    entries.sort_by_key(|b| std::cmp::Reverse(b.name.len()));
     Ok(entries)
 }
 
@@ -701,7 +701,7 @@ pub fn apply_links(content: &str, links: &[DiscoveredLink]) -> String {
     }
 
     // Sort by position descending so we can replace from end to start
-    replacements.sort_by(|a, b| b.0.cmp(&a.0));
+    replacements.sort_by_key(|b| std::cmp::Reverse(b.0));
 
     let mut result = content.to_string();
     for (start, end, replacement) in replacements {

@@ -1039,9 +1039,9 @@ impl LlamaOrchestrator {
         // Each token may produce multi-byte UTF-8 sequences; use an encoding_rs decoder
         // to correctly reassemble them across token boundaries.
         let mut decoder = encoding_rs::UTF_8.new_decoder();
-        let mut n_cur = tokens.len();
+        let prompt_len = tokens.len();
 
-        for _ in 0..max_tokens {
+        for step in 0..max_tokens {
             let new_token = sampler.sample(&ctx, batch.n_tokens() - 1);
             sampler.accept(new_token);
 
@@ -1060,9 +1060,8 @@ impl LlamaOrchestrator {
             // Add token to batch for next iteration.
             batch.clear();
             batch
-                .add(new_token, n_cur as i32, &[0], true)
+                .add(new_token, (prompt_len + step) as i32, &[0], true)
                 .map_err(|e| anyhow::anyhow!("adding generated token to batch: {e}"))?;
-            n_cur += 1;
 
             ctx.decode(&mut batch)
                 .map_err(|e| anyhow::anyhow!("generation decode failed: {e}"))?;

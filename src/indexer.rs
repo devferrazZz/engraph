@@ -358,15 +358,14 @@ pub fn index_file(
         note_date,
     )?;
 
-    let mut next_vector_id: u64 = store.next_vector_id()?;
+    let start_vector_id: u64 = store.next_vector_id()?;
     let total_chunks = chunks.len();
 
     for (chunk_seq, chunk) in chunks.iter().enumerate() {
         let heading = chunk.heading.clone().unwrap_or_default();
         let snippet = &chunk.snippet;
         let vector = &all_vectors[chunk_seq];
-        let vector_id = next_vector_id;
-        next_vector_id += 1;
+        let vector_id = start_vector_id + chunk_seq as u64;
 
         store.insert_chunk_with_vector(
             file_id,

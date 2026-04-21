@@ -53,7 +53,7 @@ pub fn extract_l1_facts(store: &Store, profile: &VaultProfile) -> Result<L1Summa
                 Some((*f, incoming.len()))
             })
             .collect();
-        scored.sort_by(|a, b| b.1.cmp(&a.1));
+        scored.sort_by_key(|b| std::cmp::Reverse(b.1));
 
         for (file, _count) in scored.into_iter().take(5) {
             let name = file_stem(&file.path);
@@ -71,7 +71,7 @@ pub fn extract_l1_facts(store: &Store, profile: &VaultProfile) -> Result<L1Summa
             .collect();
 
         // Sort by note_date descending (most recent first).
-        daily_files.sort_by(|a, b| b.note_date.cmp(&a.note_date));
+        daily_files.sort_by_key(|b| std::cmp::Reverse(b.note_date));
 
         // ── Current focus (most recent daily note) ──────────────
         if let Some(latest) = daily_files.first()

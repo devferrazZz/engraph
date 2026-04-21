@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.6.1 — Patch Release (2026-04-21)
+
+### Fixed
+- **UTF-8 panic in temporal search** — `find_iso_date_in_query()` no longer panics on queries containing multi-byte characters (e.g. Polish diacritics like ą, ś, ź, ż). Added `is_char_boundary()` guards before `&str` slicing, matching the pattern already used by `extract_date_from_filename()`. Thanks [@majkelooo](https://github.com/majkelooo) ([#24](https://github.com/devwhodevs/engraph/pull/24)).
+- **CI green on Rust 1.95** — silenced new `clippy::unnecessary_sort_by` and `clippy::explicit_counter_loop` lints promoted to deny-by-default in Rust 1.95.0. No behavior changes ([#29](https://github.com/devwhodevs/engraph/pull/29)).
+
+### Changed
+- **rmcp** bumped from 1.4.0 to 1.5.0 — adds MCP protocol version `2025-11-25` via upstream [modelcontextprotocol/rust-sdk#802](https://github.com/modelcontextprotocol/rust-sdk/pull/802). Resolves [#20](https://github.com/devwhodevs/engraph/issues/20): engraph tools now surface in Claude Desktop Cowork and Code-in-Desktop modes ([#30](https://github.com/devwhodevs/engraph/pull/30)).
+
 ## v1.6.0 — Onboarding + Identity (2026-04-10)
 
 ### Added

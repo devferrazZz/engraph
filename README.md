@@ -114,13 +114,18 @@ engraph search "how does the auth system work"
 
 Note how result #3 was found via **graph expansion** — Sarah's note doesn't mention "auth system" directly, but she's linked from the auth architecture doc via `[[Sarah Chen]]`.
 
-**Connect to Claude Code:**
+**Claude Code** — Install the plugin (recommended):
 
 ```bash
-# Start the MCP server
-engraph serve
+claude plugin marketplace add devwhodevs/engraph
+claude plugin install engraph@engraph
+```
 
-# Or add to Claude Code's settings (~/.claude/settings.json):
+**Connect to Claude Code:**
+
+Or configure MCP manually in `~/.claude/settings.json`:
+
+```bash
 {
   "mcpServers": {
     "engraph": {

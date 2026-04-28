@@ -9,7 +9,7 @@
       "name": "engraph",
       "source": "./",
       "description": "Turn your Markdown vault into a searchable knowledge graph that any AI agent can query.",
-      "version": "0.1.0",
+      "version": "1.0.0",
       "author": {
         "name": "devwhodevs",
         "email": "devwhodevs@gmail.com"

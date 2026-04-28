@@ -15,7 +15,7 @@ Local knowledge engine for markdown document collections. Combines semantic embe
 
 ## Status
 
-!`engraph status 2>/dev/null || echo "Not installed: brew install devwhodevs/tap/engraph"`
+!`engraph --version 2>/dev/null || echo "Not installed: brew install devwhodevs/tap/engraph"`
 
 ## Indexing
 

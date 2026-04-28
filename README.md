@@ -133,6 +133,12 @@ engraph serve
 
 Now Claude can search your vault, read notes, build context bundles, and create new notes — all through structured tool calls.
 
+**AI Agent Skills** — Install the Engraph skills using the skills CLI (recommended):
+
+```bash
+npx skills add devwhodevs/engraph
+```
+
 **Enable HTTP REST API:**
 
 ```bash

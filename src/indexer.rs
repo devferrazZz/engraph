@@ -166,14 +166,44 @@ fn resolve_link_target(store: &Store, target: &str) -> Result<Option<i64>> {
 }
 
 /// Build wikilink edges for a single file.
+///
+/// For each `[[target]]` wikilink in `content`:
+/// - If target resolves: insert ONE directed edge from source → target.
+///   Wikilinks are directional — the reverse edge should only exist if
+///   the target's own content contains a wikilink back to source. (That
+///   reverse edge gets inserted when `build_edges_for_file` is called on
+///   the target file with its own content.)
+/// - If target doesn't resolve: record in `unresolved_links` for
+///   downstream broken-wikilink tooling.
+///
+/// Clears pre-existing `unresolved_links` entries for the source file
+/// before re-recording, so this is safe to call repeatedly during
+/// incremental indexing.
 pub fn build_edges_for_file(store: &Store, file_id: i64, content: &str) -> Result<()> {
+    let source_path = match store.get_file_by_id(file_id)? {
+        Some(f) => f.path,
+        None => return Ok(()), // file vanished mid-index; no-op
+    };
+
+    // Clear stale unresolved entries for this file before re-recording.
+    store.clear_unresolved_links_for_file(&source_path)?;
+
     let targets = extract_wikilink_targets(content);
     for target in targets {
-        if let Some(target_id) = resolve_link_target(store, &target)?
-            && target_id != file_id
-        {
-            store.insert_edge(file_id, target_id, "wikilink")?;
-            store.insert_edge(target_id, file_id, "wikilink")?;
+        match resolve_link_target(store, &target)? {
+            Some(target_id) if target_id != file_id => {
+                store.insert_edge(file_id, target_id, "wikilink")?;
+                // NOTE: do NOT insert a reverse edge here. Wikilinks are
+                // directional — the reverse edge is inserted (if it exists)
+                // when build_edges_for_file is called on the target file
+                // with its own content.
+            }
+            Some(_) => {
+                // Self-link — ignore
+            }
+            None => {
+                store.insert_unresolved_link(&source_path, &target)?;
+            }
         }
     }
     Ok(())
@@ -910,6 +940,116 @@ mod tests {
         let b_out = store.get_outgoing(f_b, Some("wikilink")).unwrap();
         assert_eq!(b_out.len(), 1);
         assert_eq!(b_out[0].0, f_a);
+    }
+
+    #[test]
+    fn test_wikilink_edges_are_directional_not_bidirectional() {
+        // Regression test for the "edges stored bidirectionally" bug.
+        // A has [[B]]; B has NO wikilink to A. Expected: A→B edge exists,
+        // B→A edge does NOT exist. Pre-fix, the indexer fabricated the
+        // reverse edge regardless of B's actual content.
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        write_file(root, "a.md", "# A\nSee [[b]] for details.");
+        write_file(root, "b.md", "# B\nNo backlink here.");
+
+        let store = Store::open_memory().unwrap();
+        let f_a = store
+            .insert_file("a.md", "h1", 100, &[], "aaa111", None, None)
+            .unwrap();
+        let f_b = store
+            .insert_file("b.md", "h2", 100, &[], "bbb222", None, None)
+            .unwrap();
+
+        let content_a = std::fs::read_to_string(root.join("a.md")).unwrap();
+        let content_b = std::fs::read_to_string(root.join("b.md")).unwrap();
+
+        build_edges_for_file(&store, f_a, &content_a).unwrap();
+        build_edges_for_file(&store, f_b, &content_b).unwrap();
+
+        // A → B exists (A's content has [[b]])
+        let a_out = store.get_outgoing(f_a, Some("wikilink")).unwrap();
+        assert_eq!(a_out.len(), 1, "A should have 1 outgoing wikilink");
+        assert_eq!(a_out[0].0, f_b);
+
+        // B → A does NOT exist (B's content has no wikilink to A)
+        let b_out = store.get_outgoing(f_b, Some("wikilink")).unwrap();
+        assert_eq!(
+            b_out.len(),
+            0,
+            "B should have 0 outgoing wikilinks (B has no [[a]] in content)"
+        );
+
+        // But B should have 1 INCOMING from A
+        let b_in = store.get_incoming(f_b, Some("wikilink")).unwrap();
+        assert_eq!(b_in.len(), 1, "B should have 1 incoming wikilink (from A)");
+        assert_eq!(b_in[0].0, f_a);
+    }
+
+    #[test]
+    fn test_unresolved_wikilinks_are_recorded() {
+        // Regression test for the "unresolved_links table never populated" bug.
+        // A has [[b]] (resolves) and [[nonexistent-target]] (doesn't).
+        // Expected: the unresolved target is recorded in unresolved_links.
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        write_file(
+            root,
+            "a.md",
+            "# A\nSee [[b]] for details.\nAlso [[nonexistent-target]] for nothing.",
+        );
+        write_file(root, "b.md", "# B");
+
+        let store = Store::open_memory().unwrap();
+        let f_a = store
+            .insert_file("a.md", "h1", 100, &[], "aaa111", None, None)
+            .unwrap();
+        let _f_b = store
+            .insert_file("b.md", "h2", 100, &[], "bbb222", None, None)
+            .unwrap();
+
+        let content_a = std::fs::read_to_string(root.join("a.md")).unwrap();
+        build_edges_for_file(&store, f_a, &content_a).unwrap();
+
+        // Unresolved target should be recorded
+        let unresolved = store.get_unresolved_links().unwrap();
+        assert_eq!(
+            unresolved.len(),
+            1,
+            "Should have 1 unresolved wikilink (nonexistent-target)"
+        );
+        assert_eq!(unresolved[0].0, "a.md");
+        assert_eq!(unresolved[0].1, "nonexistent-target");
+    }
+
+    #[test]
+    fn test_unresolved_links_cleared_on_re_index() {
+        // When build_edges_for_file is called again on the same source
+        // (incremental update / re-index), stale unresolved entries for
+        // that source should be cleared before re-recording. Otherwise
+        // entries accumulate even after the user fixes broken links.
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        write_file(root, "a.md", "# A\nSee [[broken-target]] for nothing.");
+
+        let store = Store::open_memory().unwrap();
+        let f_a = store
+            .insert_file("a.md", "h1", 100, &[], "aaa111", None, None)
+            .unwrap();
+
+        let content_a_v1 = std::fs::read_to_string(root.join("a.md")).unwrap();
+        build_edges_for_file(&store, f_a, &content_a_v1).unwrap();
+        assert_eq!(store.get_unresolved_links().unwrap().len(), 1);
+
+        // Now A is edited to remove the broken wikilink entirely.
+        let content_a_v2 = "# A\nNo wikilinks here now.";
+        build_edges_for_file(&store, f_a, content_a_v2).unwrap();
+        let unresolved = store.get_unresolved_links().unwrap();
+        assert_eq!(
+            unresolved.len(),
+            0,
+            "Stale unresolved entry should be cleared after re-index"
+        );
     }
 
     #[test]

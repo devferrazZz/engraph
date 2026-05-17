@@ -20,7 +20,7 @@ use crate::health;
 use crate::llm::{EmbedModel, OrchestratorModel, RerankModel};
 use crate::profile::VaultProfile;
 use crate::search;
-use crate::serve::RecentWrites;
+use crate::serve::{FrontmatterOpInput, FrontmatterOpKind, RecentWrites};
 use crate::store::Store;
 use crate::writer::{
     self, AppendInput, CreateNoteInput, DeleteMode, EditFrontmatterInput, EditInput, EditMode,
@@ -295,7 +295,7 @@ struct RewriteBody {
 #[derive(Debug, Deserialize)]
 struct EditFrontmatterBody {
     file: String,
-    operations: Vec<serde_json::Value>,
+    operations: Vec<FrontmatterOpInput>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -633,76 +633,54 @@ async fn record_write(recent_writes: &RecentWrites, path: &std::path::Path) {
     }
 }
 
-/// Parse a JSON operations array into `Vec<FrontmatterOp>`.
-fn parse_frontmatter_ops(operations: &[serde_json::Value]) -> Result<Vec<FrontmatterOp>, ApiError> {
+/// Convert typed operation inputs into `Vec<FrontmatterOp>`.
+fn parse_frontmatter_ops(
+    operations: &[FrontmatterOpInput],
+) -> Result<Vec<FrontmatterOp>, ApiError> {
     let mut ops = Vec::with_capacity(operations.len());
-    for op_val in operations {
-        let op_str = op_val.get("op").and_then(|v| v.as_str()).ok_or_else(|| {
-            ApiError::bad_request("each operation must have an \"op\" string field")
-        })?;
-        match op_str {
-            "set" => {
-                let key = op_val.get("key").and_then(|v| v.as_str()).ok_or_else(|| {
+    for input in operations {
+        let op = match input.op {
+            FrontmatterOpKind::Set => {
+                let key = input.key.as_deref().ok_or_else(|| {
                     ApiError::bad_request("\"set\" operation requires a \"key\" field")
                 })?;
-                let value = op_val
-                    .get("value")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| {
-                        ApiError::bad_request("\"set\" operation requires a \"value\" field")
-                    })?;
-                ops.push(FrontmatterOp::Set(key.to_string(), value.to_string()));
+                let value = input.value.as_deref().ok_or_else(|| {
+                    ApiError::bad_request("\"set\" operation requires a \"value\" field")
+                })?;
+                FrontmatterOp::Set(key.to_string(), value.to_string())
             }
-            "remove" => {
-                let key = op_val.get("key").and_then(|v| v.as_str()).ok_or_else(|| {
+            FrontmatterOpKind::Remove => {
+                let key = input.key.as_deref().ok_or_else(|| {
                     ApiError::bad_request("\"remove\" operation requires a \"key\" field")
                 })?;
-                ops.push(FrontmatterOp::Remove(key.to_string()));
+                FrontmatterOp::Remove(key.to_string())
             }
-            "add_tag" => {
-                let value = op_val
-                    .get("value")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| {
-                        ApiError::bad_request("\"add_tag\" operation requires a \"value\" field")
-                    })?;
-                ops.push(FrontmatterOp::AddTag(value.to_string()));
+            FrontmatterOpKind::AddTag => {
+                let value = input.value.as_deref().ok_or_else(|| {
+                    ApiError::bad_request("\"add_tag\" operation requires a \"value\" field")
+                })?;
+                FrontmatterOp::AddTag(value.to_string())
             }
-            "remove_tag" => {
-                let value = op_val
-                    .get("value")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| {
-                        ApiError::bad_request("\"remove_tag\" operation requires a \"value\" field")
-                    })?;
-                ops.push(FrontmatterOp::RemoveTag(value.to_string()));
+            FrontmatterOpKind::RemoveTag => {
+                let value = input.value.as_deref().ok_or_else(|| {
+                    ApiError::bad_request("\"remove_tag\" operation requires a \"value\" field")
+                })?;
+                FrontmatterOp::RemoveTag(value.to_string())
             }
-            "add_alias" => {
-                let value = op_val
-                    .get("value")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| {
-                        ApiError::bad_request("\"add_alias\" operation requires a \"value\" field")
-                    })?;
-                ops.push(FrontmatterOp::AddAlias(value.to_string()));
+            FrontmatterOpKind::AddAlias => {
+                let value = input.value.as_deref().ok_or_else(|| {
+                    ApiError::bad_request("\"add_alias\" operation requires a \"value\" field")
+                })?;
+                FrontmatterOp::AddAlias(value.to_string())
             }
-            "remove_alias" => {
-                let value = op_val
-                    .get("value")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| {
-                        ApiError::bad_request(
-                            "\"remove_alias\" operation requires a \"value\" field",
-                        )
-                    })?;
-                ops.push(FrontmatterOp::RemoveAlias(value.to_string()));
+            FrontmatterOpKind::RemoveAlias => {
+                let value = input.value.as_deref().ok_or_else(|| {
+                    ApiError::bad_request("\"remove_alias\" operation requires a \"value\" field")
+                })?;
+                FrontmatterOp::RemoveAlias(value.to_string())
             }
-            unknown => {
-                return Err(ApiError::bad_request(&format!(
-                    "unknown frontmatter operation: \"{unknown}\""
-                )));
-            }
-        }
+        };
+        ops.push(op);
     }
     Ok(ops)
 }

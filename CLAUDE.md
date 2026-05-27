@@ -40,8 +40,8 @@ Single binary with 26 modules behind a lib crate:
 ## Key patterns
 
 - **5-lane hybrid search:** Queries run through up to five lanes — semantic (sqlite-vec KNN embeddings), keyword (FTS5 BM25), graph (wikilink expansion), cross-encoder reranking, and temporal (date-range scoring). A research orchestrator classifies query intent and sets adaptive lane weights. Two-pass RRF: retrieval lanes → reranker scores top 30 → 5-lane fusion. When intelligence is off, falls back to heuristic intent classification. Temporal intent detection works with both heuristic and LLM orchestrators
-- **Vault graph:** `edges` table stores bidirectional wikilink edges and mention edges. Built during indexing after all files are written. People detection scans for person name/alias mentions using notes from the configured People folder
-- **Graph agent:** Expands seed results by following wikilinks 1-2 hops. Decay: 0.8x for 1-hop, 0.5x for 2-hop. Relevance filter: must contain query term (FTS5) or share tags with seed. Multi-parent merge takes highest score
+- **Vault graph:** `edges` table stores directional wikilink edges (one per `[[link]]`; the reverse edge exists only when the target links back) and mention edges. Built during indexing after all files are written. Wikilinks that resolve to no file are recorded in `unresolved_links`. People detection scans for person name/alias mentions using notes from the configured People folder
+- **Graph agent:** Expands seed results by following wikilinks 1-2 hops in either direction — outgoing links and backlinks (`get_neighbors` traverses both, on top of the directional edge store). Decay: 0.8x for 1-hop, 0.5x for 2-hop. Relevance filter: must contain query term (FTS5) or share tags with seed. Multi-parent merge takes highest score
 - **Smart chunking:** Break-point scoring algorithm assigns scores to potential split points (headings 50-100, code fences 80, thematic breaks 60, blank lines 20). Code fence protection prevents splitting inside code blocks
 - **Incremental indexing:** `diff_vault()` compares file content hashes in SQLite against disk. Changed files have their old chunks, vectors, and edges deleted, then are re-processed. FTS5 and sqlite-vec entries cleaned up alongside store entries
 - **sqlite-vec for vector search:** Vectors stored in a `vec_chunks` virtual table (vec0). KNN search via `vec_distance_cosine()`. Real deletes — no tombstone filtering needed during search
@@ -84,7 +84,7 @@ Single vault only. Re-indexing a different vault path triggers a confirmation pr
 
 ## Testing
 
-- Unit tests in each module (`cargo test --lib`) — 426 tests, no network required
+- Unit tests in each module (`cargo test --lib`) — 466 tests, no network required
 - Integration tests (`cargo test --test integration -- --ignored`) — require GGUF model download
 - Build requires CMake (for llama.cpp C++ compilation)
 

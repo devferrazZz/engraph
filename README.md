@@ -147,7 +147,7 @@ npx skills add devwhodevs/engraph
 **Enable HTTP REST API:**
 
 ```bash
-# Start MCP + HTTP server on port 3030
+# Start MCP + HTTP server on port 3000
 engraph serve --http
 
 # Custom port and host
@@ -315,7 +315,7 @@ Returns orphan notes (no links in or out), broken wikilinks, stale notes, and ta
 All requests require an API key via the `Authorization` header:
 
 ```bash
-curl -H "Authorization: Bearer eg_abc123..." http://localhost:3030/api/vault-map
+curl -H "Authorization: Bearer eg_abc123..." http://localhost:3000/api/vault-map
 ```
 
 Keys have either `read` or `write` permission. Write keys can access all endpoints; read keys are restricted to read-only endpoints. Use `--no-auth` for local development without keys (127.0.0.1 only).
@@ -324,17 +324,17 @@ Keys have either `read` or `write` permission. Write keys can access all endpoin
 
 ```bash
 # Search
-curl -X POST http://localhost:3030/api/search \
+curl -X POST http://localhost:3000/api/search \
   -H "Authorization: Bearer eg_..." \
   -H "Content-Type: application/json" \
   -d '{"query": "authentication architecture", "top_n": 5}'
 
 # Read a note
-curl http://localhost:3030/api/read/01-Projects/API-Design.md \
+curl http://localhost:3000/api/read/01-Projects/API-Design.md \
   -H "Authorization: Bearer eg_..."
 
 # Create a note
-curl -X POST http://localhost:3030/api/create \
+curl -X POST http://localhost:3000/api/create \
   -H "Authorization: Bearer eg_..." \
   -H "Content-Type: application/json" \
   -d '{"content": "# Meeting Notes\n\nDiscussed auth timeline.", "tags": ["meeting", "auth"]}'
@@ -346,7 +346,7 @@ curl -X POST http://localhost:3030/api/create \
 
 ```toml
 [http]
-port = 3030
+port = 3000
 host = "127.0.0.1"
 cors_origins = ["http://localhost:3000", "https://myapp.example.com"]
 rate_limit = 60

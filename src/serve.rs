@@ -170,12 +170,35 @@ pub struct RewriteParams {
     pub preserve_frontmatter: Option<bool>,
 }
 
+/// Operation kind for frontmatter edits.
+#[derive(Debug, Clone, Copy, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FrontmatterOpKind {
+    Set,
+    Remove,
+    AddTag,
+    RemoveTag,
+    AddAlias,
+    RemoveAlias,
+}
+
+/// A single frontmatter operation.
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub struct FrontmatterOpInput {
+    /// Operation type.
+    pub op: FrontmatterOpKind,
+    /// Property key (required for "set" and "remove").
+    pub key: Option<String>,
+    /// Value (required for "set", "add_tag", "remove_tag", "add_alias", "remove_alias").
+    pub value: Option<String>,
+}
+
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct EditFrontmatterParams {
     /// Target note: file path, basename, or #docid.
     pub file: String,
     /// Operations to apply. Array of objects like {"op": "add_tag", "value": "rust"} or {"op": "set", "key": "status", "value": "done"} or {"op": "remove", "key": "status"} or {"op": "remove_tag", "value": "old"}.
-    pub operations: Vec<serde_json::Value>,
+    pub operations: Vec<FrontmatterOpInput>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -266,108 +289,82 @@ async fn record_write(recent_writes: &RecentWrites, path: &Path) {
     }
 }
 
-/// Parse a JSON operations array into `Vec<FrontmatterOp>`.
-fn parse_frontmatter_ops(operations: &[serde_json::Value]) -> Result<Vec<FrontmatterOp>, McpError> {
+/// Convert typed operation inputs into `Vec<FrontmatterOp>`.
+fn parse_frontmatter_ops(
+    operations: &[FrontmatterOpInput],
+) -> Result<Vec<FrontmatterOp>, McpError> {
     let mut ops = Vec::with_capacity(operations.len());
-    for op_val in operations {
-        let op_str = op_val.get("op").and_then(|v| v.as_str()).ok_or_else(|| {
-            McpError::new(
-                rmcp::model::ErrorCode::INVALID_PARAMS,
-                "each operation must have an \"op\" string field",
-                None::<serde_json::Value>,
-            )
-        })?;
-        match op_str {
-            "set" => {
-                let key = op_val.get("key").and_then(|v| v.as_str()).ok_or_else(|| {
+    for input in operations {
+        let op = match input.op {
+            FrontmatterOpKind::Set => {
+                let key = input.key.as_deref().ok_or_else(|| {
                     McpError::new(
                         rmcp::model::ErrorCode::INVALID_PARAMS,
                         "\"set\" operation requires a \"key\" field",
                         None::<serde_json::Value>,
                     )
                 })?;
-                let value = op_val
-                    .get("value")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| {
-                        McpError::new(
-                            rmcp::model::ErrorCode::INVALID_PARAMS,
-                            "\"set\" operation requires a \"value\" field",
-                            None::<serde_json::Value>,
-                        )
-                    })?;
-                ops.push(FrontmatterOp::Set(key.to_string(), value.to_string()));
+                let value = input.value.as_deref().ok_or_else(|| {
+                    McpError::new(
+                        rmcp::model::ErrorCode::INVALID_PARAMS,
+                        "\"set\" operation requires a \"value\" field",
+                        None::<serde_json::Value>,
+                    )
+                })?;
+                FrontmatterOp::Set(key.to_string(), value.to_string())
             }
-            "remove" => {
-                let key = op_val.get("key").and_then(|v| v.as_str()).ok_or_else(|| {
+            FrontmatterOpKind::Remove => {
+                let key = input.key.as_deref().ok_or_else(|| {
                     McpError::new(
                         rmcp::model::ErrorCode::INVALID_PARAMS,
                         "\"remove\" operation requires a \"key\" field",
                         None::<serde_json::Value>,
                     )
                 })?;
-                ops.push(FrontmatterOp::Remove(key.to_string()));
+                FrontmatterOp::Remove(key.to_string())
             }
-            "add_tag" => {
-                let value = op_val
-                    .get("value")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| {
-                        McpError::new(
-                            rmcp::model::ErrorCode::INVALID_PARAMS,
-                            "\"add_tag\" operation requires a \"value\" field",
-                            None::<serde_json::Value>,
-                        )
-                    })?;
-                ops.push(FrontmatterOp::AddTag(value.to_string()));
+            FrontmatterOpKind::AddTag => {
+                let value = input.value.as_deref().ok_or_else(|| {
+                    McpError::new(
+                        rmcp::model::ErrorCode::INVALID_PARAMS,
+                        "\"add_tag\" operation requires a \"value\" field",
+                        None::<serde_json::Value>,
+                    )
+                })?;
+                FrontmatterOp::AddTag(value.to_string())
             }
-            "remove_tag" => {
-                let value = op_val
-                    .get("value")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| {
-                        McpError::new(
-                            rmcp::model::ErrorCode::INVALID_PARAMS,
-                            "\"remove_tag\" operation requires a \"value\" field",
-                            None::<serde_json::Value>,
-                        )
-                    })?;
-                ops.push(FrontmatterOp::RemoveTag(value.to_string()));
+            FrontmatterOpKind::RemoveTag => {
+                let value = input.value.as_deref().ok_or_else(|| {
+                    McpError::new(
+                        rmcp::model::ErrorCode::INVALID_PARAMS,
+                        "\"remove_tag\" operation requires a \"value\" field",
+                        None::<serde_json::Value>,
+                    )
+                })?;
+                FrontmatterOp::RemoveTag(value.to_string())
             }
-            "add_alias" => {
-                let value = op_val
-                    .get("value")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| {
-                        McpError::new(
-                            rmcp::model::ErrorCode::INVALID_PARAMS,
-                            "\"add_alias\" operation requires a \"value\" field",
-                            None::<serde_json::Value>,
-                        )
-                    })?;
-                ops.push(FrontmatterOp::AddAlias(value.to_string()));
+            FrontmatterOpKind::AddAlias => {
+                let value = input.value.as_deref().ok_or_else(|| {
+                    McpError::new(
+                        rmcp::model::ErrorCode::INVALID_PARAMS,
+                        "\"add_alias\" operation requires a \"value\" field",
+                        None::<serde_json::Value>,
+                    )
+                })?;
+                FrontmatterOp::AddAlias(value.to_string())
             }
-            "remove_alias" => {
-                let value = op_val
-                    .get("value")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| {
-                        McpError::new(
-                            rmcp::model::ErrorCode::INVALID_PARAMS,
-                            "\"remove_alias\" operation requires a \"value\" field",
-                            None::<serde_json::Value>,
-                        )
-                    })?;
-                ops.push(FrontmatterOp::RemoveAlias(value.to_string()));
+            FrontmatterOpKind::RemoveAlias => {
+                let value = input.value.as_deref().ok_or_else(|| {
+                    McpError::new(
+                        rmcp::model::ErrorCode::INVALID_PARAMS,
+                        "\"remove_alias\" operation requires a \"value\" field",
+                        None::<serde_json::Value>,
+                    )
+                })?;
+                FrontmatterOp::RemoveAlias(value.to_string())
             }
-            unknown => {
-                return Err(McpError::new(
-                    rmcp::model::ErrorCode::INVALID_PARAMS,
-                    format!("unknown frontmatter operation: \"{unknown}\""),
-                    None::<serde_json::Value>,
-                ));
-            }
-        }
+        };
+        ops.push(op);
     }
     Ok(ops)
 }
@@ -1164,4 +1161,60 @@ pub async fn run_serve(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression test for <https://github.com/devwhodevs/engraph/issues/32>.
+    #[test]
+    fn edit_frontmatter_operations_schema_has_object_items() {
+        let schema = schemars::schema_for!(EditFrontmatterParams);
+        let json = serde_json::to_value(&schema).unwrap();
+
+        let items = &json["properties"]["operations"]["items"];
+        assert!(
+            items.is_object(),
+            "operations.items must be an object schema, got: {items}"
+        );
+
+        // schemars may inline properties or use a $ref to $defs; both are
+        // valid object schemas that OpenAI accepts.
+        let has_properties = items.get("properties").is_some();
+        let has_ref = items.get("$ref").is_some();
+        assert!(
+            has_properties || has_ref,
+            "operations.items must define properties or $ref, got: {items}"
+        );
+    }
+
+    #[test]
+    fn frontmatter_op_input_deserializes_all_variants() {
+        let cases = [
+            (r#"{"op":"set","key":"status","value":"done"}"#, "set"),
+            (r#"{"op":"remove","key":"status"}"#, "remove"),
+            (r#"{"op":"add_tag","value":"rust"}"#, "add_tag"),
+            (r#"{"op":"remove_tag","value":"old"}"#, "remove_tag"),
+            (r#"{"op":"add_alias","value":"eng"}"#, "add_alias"),
+            (r#"{"op":"remove_alias","value":"eng"}"#, "remove_alias"),
+        ];
+        for (json, label) in cases {
+            let input: FrontmatterOpInput = serde_json::from_str(json)
+                .unwrap_or_else(|e| panic!("failed to deserialize {label}: {e}"));
+            // Verify the parsed input converts to a valid FrontmatterOp.
+            let ops = parse_frontmatter_ops(&[input]);
+            assert!(ops.is_ok(), "{label} should produce a valid op: {:?}", ops);
+        }
+    }
+
+    #[test]
+    fn frontmatter_op_input_rejects_unknown_variant() {
+        let json = r#"{"op":"unknown_op","value":"x"}"#;
+        let result: Result<FrontmatterOpInput, _> = serde_json::from_str(json);
+        assert!(
+            result.is_err(),
+            "unknown op variant should fail deserialization"
+        );
+    }
 }

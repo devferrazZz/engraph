@@ -123,6 +123,9 @@ pub struct Config {
     pub exclude: Vec<String>,
     /// Number of files to process per embedding batch.
     pub batch_size: usize,
+    /// Honor `.gitignore` / `.ignore` files when walking the vault. Set false
+    /// to index files those VCS rules would otherwise skip.
+    pub respect_gitignore: bool,
     /// Whether intelligence features are enabled. None = not yet configured.
     pub intelligence: Option<bool>,
     /// Model override URIs.
@@ -149,6 +152,7 @@ impl Default for Config {
             top_n: 5,
             exclude: vec![".obsidian/".to_string()],
             batch_size: 64,
+            respect_gitignore: true,
             intelligence: None,
             models: ModelConfig::default(),
             obsidian: ObsidianConfig::default(),

@@ -39,6 +39,10 @@ enum Command {
         /// Rebuild the index from scratch.
         #[arg(long)]
         rebuild: bool,
+
+        /// Index files that `.gitignore` / `.ignore` would normally exclude.
+        #[arg(long)]
+        no_gitignore: bool,
     },
 
     /// Search the indexed vault.
@@ -444,9 +448,16 @@ async fn main() -> Result<()> {
     let data_dir = Config::data_dir()?;
 
     match cli.command {
-        Command::Index { path, rebuild } => {
+        Command::Index {
+            path,
+            rebuild,
+            no_gitignore,
+        } => {
             // Merge CLI vault path over config.
             cfg.merge_vault_path(path);
+            if no_gitignore {
+                cfg.respect_gitignore = false;
+            }
 
             // Fall back to current directory if neither CLI nor config provides a vault path.
             let vault_path = match &cfg.vault_path {

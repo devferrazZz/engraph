@@ -202,9 +202,9 @@ mod tests {
     fn test_extract_wikilinks_escaped_pipe_in_table() {
         // Obsidian escapes the alias pipe as `\|` inside tables; the target
         // must still resolve to the note name, not "Name\".
-        let text = "| [[Vlad Apukhtin\\|Vlad]] | done |";
+        let text = "| [[Page Name\\|Page]] | done |";
         let targets = extract_wikilink_targets(text);
-        assert_eq!(targets, vec!["Vlad Apukhtin"]);
+        assert_eq!(targets, vec!["Page Name"]);
     }
 
     #[test]

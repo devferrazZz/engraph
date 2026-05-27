@@ -23,8 +23,11 @@ pub fn extract_wikilink_targets(text: &str) -> Vec<String> {
             {
                 let inner = &rest[..close];
                 if !is_embed && !inner.is_empty() && !inner.contains('\n') {
+                    // Obsidian escapes the alias pipe as `\|` inside tables;
+                    // unescape it so the `|` separator is recognized.
+                    let inner = inner.replace("\\|", "|");
                     // Strip heading: [[Note#Section]] → "Note"
-                    let target = inner.split('#').next().unwrap_or(inner);
+                    let target = inner.split('#').next().unwrap_or(inner.as_str());
                     // Strip display: [[Note|Display]] → "Note"
                     let target = target.split('|').next().unwrap_or(target);
                     let target = target.trim().to_string();
@@ -193,6 +196,15 @@ mod tests {
         let text = "[[Note#Section|Custom Display]]";
         let targets = extract_wikilink_targets(text);
         assert_eq!(targets, vec!["Note"]); // strip both heading and display
+    }
+
+    #[test]
+    fn test_extract_wikilinks_escaped_pipe_in_table() {
+        // Obsidian escapes the alias pipe as `\|` inside tables; the target
+        // must still resolve to the note name, not "Name\".
+        let text = "| [[Vlad Apukhtin\\|Vlad]] | done |";
+        let targets = extract_wikilink_targets(text);
+        assert_eq!(targets, vec!["Vlad Apukhtin"]);
     }
 
     #[test]

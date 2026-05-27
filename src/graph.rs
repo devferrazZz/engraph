@@ -429,4 +429,61 @@ mod tests {
         // Score: 0.85 * 0.8 * 0.7 = 0.476
         assert!((expanded[0].score - 0.476).abs() < 0.01);
     }
+
+    #[test]
+    fn test_graph_expand_follows_backlinks() {
+        let store = Store::open_memory().unwrap();
+        let seed = store
+            .insert_file(
+                "seed.md",
+                "h1",
+                100,
+                &[],
+                &generate_docid("seed.md"),
+                None,
+                None,
+            )
+            .unwrap();
+        let backlinker = store
+            .insert_file(
+                "backlink.md",
+                "h2",
+                100,
+                &[],
+                &generate_docid("backlink.md"),
+                None,
+                None,
+            )
+            .unwrap();
+
+        // backlink.md links TO seed.md; seed.md has no outgoing links.
+        store.insert_edge(backlinker, seed, "wikilink").unwrap();
+        store
+            .insert_chunk(
+                backlinker,
+                "## Backlink",
+                "Backlink content about delivery",
+                10,
+                20,
+            )
+            .unwrap();
+        store
+            .insert_fts_chunk(backlinker, 0, "Backlink content about delivery")
+            .unwrap();
+
+        let seeds = vec![RankedResult {
+            file_path: "seed.md".into(),
+            file_id: seed,
+            score: 0.85,
+            heading: None,
+            snippet: "Seed".into(),
+            docid: None,
+        }];
+
+        // Graph expansion is undirected: a note that links INTO the seed and
+        // matches the query is surfaced as an expansion.
+        let expanded = graph_expand(&store, &seeds, "delivery", 2, 20).unwrap();
+        assert_eq!(expanded.len(), 1);
+        assert_eq!(expanded[0].file_path, "backlink.md");
+    }
 }

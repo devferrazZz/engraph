@@ -34,12 +34,31 @@ pub struct IndexFileResult {
 
 /// Walk a vault directory and collect all `.md` file paths.
 ///
-/// Uses the `ignore` crate so `.gitignore` rules are respected automatically.
-/// Additional exclude patterns (e.g. `.obsidian/`) are applied on top.
-pub fn walk_vault(path: &Path, exclude: &[String]) -> Result<Vec<PathBuf>> {
-    let walker = WalkBuilder::new(path)
-        .standard_filters(true) // respect .gitignore, .ignore, etc.
-        .build();
+/// When `respect_gitignore` is true, the `ignore` crate honors `.gitignore` /
+/// `.ignore` rules (within a git repo, per the crate's `require_git` default).
+/// Set it false to index files those VCS rules would skip; hidden entries
+/// (`.git/`, dotfiles) and the explicit `exclude` patterns are always skipped.
+pub fn walk_vault(
+    path: &Path,
+    exclude: &[String],
+    respect_gitignore: bool,
+) -> Result<Vec<PathBuf>> {
+    let mut builder = WalkBuilder::new(path);
+    if respect_gitignore {
+        builder.standard_filters(true); // respect .gitignore, .ignore, hidden, etc.
+    } else {
+        // Stop honoring .gitignore / .ignore so VCS-ignored files get indexed,
+        // but still skip hidden entries (.git/, dotfiles) and apply the
+        // explicit exclude patterns below.
+        builder
+            .hidden(true)
+            .parents(true)
+            .git_ignore(false)
+            .git_global(false)
+            .git_exclude(false)
+            .ignore(false);
+    }
+    let walker = builder.build();
 
     let mut files = Vec::new();
     for entry in walker {
@@ -548,7 +567,7 @@ fn run_index_inner(
     }
 
     // If rebuild, treat everything as new.
-    let files = walk_vault(vault_path, &exclude)?;
+    let files = walk_vault(vault_path, &exclude, config.respect_gitignore)?;
 
     let (new_files, changed_files, deleted_files) = if rebuild {
         // On rebuild we skip diffing — all files are "new".
@@ -753,7 +772,7 @@ mod tests {
         write_file(root, "image.png", "not markdown");
         write_file(root, "readme.txt", "text file");
 
-        let files = walk_vault(root, &[]).unwrap();
+        let files = walk_vault(root, &[], true).unwrap();
         assert_eq!(files.len(), 3, "expected 3 .md files, got {:?}", files);
         for f in &files {
             assert_eq!(f.extension().unwrap(), "md");
@@ -768,7 +787,7 @@ mod tests {
         write_file(root, ".obsidian/workspace.md", "obsidian internal");
         write_file(root, ".obsidian/plugins/plugin.md", "plugin data");
 
-        let files = walk_vault(root, &[".obsidian/".to_string()]).unwrap();
+        let files = walk_vault(root, &[".obsidian/".to_string()], true).unwrap();
         assert_eq!(files.len(), 1, "expected 1 file, got {:?}", files);
         assert!(files[0].ends_with("note.md"));
     }
@@ -789,7 +808,7 @@ mod tests {
         write_file(root, "note.md", "# Note");
         write_file(root, "drafts/note.md", "# Draft");
 
-        let files = walk_vault(root, &[]).unwrap();
+        let files = walk_vault(root, &[], true).unwrap();
         assert_eq!(
             files.len(),
             1,
@@ -800,6 +819,48 @@ mod tests {
     }
 
     #[test]
+    fn test_walk_gitignore_toggle() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+
+        // Git repo so the ignore crate honors .gitignore (require_git default).
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(root)
+            .output()
+            .expect("git init failed");
+
+        write_file(root, ".gitignore", "drafts/\n");
+        write_file(root, "note.md", "# Note");
+        write_file(root, "drafts/draft.md", "# Draft");
+
+        // respect_gitignore = true: the gitignored dir is skipped.
+        let respected = walk_vault(root, &[], true).unwrap();
+        assert_eq!(
+            respected.len(),
+            1,
+            "gitignored dir should be skipped, got {:?}",
+            respected
+        );
+        assert!(respected[0].ends_with("note.md"));
+
+        // respect_gitignore = false: the gitignored file is indexed too.
+        let ignored = walk_vault(root, &[], false).unwrap();
+        let names: Vec<String> = ignored
+            .iter()
+            .map(|f| f.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            ignored.len(),
+            2,
+            "expected gitignored file to be included, got {:?}",
+            ignored
+        );
+        assert!(names.contains(&"note.md".to_string()));
+        assert!(names.contains(&"draft.md".to_string()));
+    }
+
+    #[test]
     fn test_detect_new_files() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
@@ -807,7 +868,7 @@ mod tests {
         write_file(root, "b.md", "# B");
 
         let store = Store::open_memory().unwrap();
-        let files = walk_vault(root, &[]).unwrap();
+        let files = walk_vault(root, &[], true).unwrap();
         let (new, changed, deleted) = diff_vault(&files, root, &store).unwrap();
 
         assert_eq!(new.len(), 2, "all files should be new");
@@ -835,7 +896,7 @@ mod tests {
             )
             .unwrap();
 
-        let files = walk_vault(root, &[]).unwrap();
+        let files = walk_vault(root, &[], true).unwrap();
         let (new, changed, deleted) = diff_vault(&files, root, &store).unwrap();
 
         assert_eq!(new.len(), 0);
@@ -878,7 +939,7 @@ mod tests {
             )
             .unwrap();
 
-        let files = walk_vault(root, &[]).unwrap();
+        let files = walk_vault(root, &[], true).unwrap();
         let (new, changed, deleted) = diff_vault(&files, root, &store).unwrap();
 
         assert_eq!(new.len(), 0);

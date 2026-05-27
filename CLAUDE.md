@@ -84,7 +84,7 @@ Single vault only. Re-indexing a different vault path triggers a confirmation pr
 
 ## Testing
 
-- Unit tests in each module (`cargo test --lib`) — 466 tests, no network required
+- Unit tests in each module (`cargo test --lib`) — 467 tests, no network required
 - Integration tests (`cargo test --test integration -- --ignored`) — require GGUF model download
 - Build requires CMake (for llama.cpp C++ compilation)
 

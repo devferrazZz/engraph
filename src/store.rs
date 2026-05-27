@@ -934,8 +934,8 @@ impl Store {
 
     // ── Graph helpers ────────────────────────────────────────────
 
-    /// Get neighbor file IDs within N hops via wikilinks.
-    /// Uses Rust-side BFS, not recursive SQL CTE.
+    /// Get neighbor file IDs within N hops via wikilinks, in either direction
+    /// (outgoing links and backlinks). Uses Rust-side BFS, not recursive SQL CTE.
     pub fn get_neighbors(&self, file_id: i64, depth: usize) -> Result<Vec<(i64, usize)>> {
         use std::collections::VecDeque;
         let mut visited = HashSet::new();
@@ -947,8 +947,14 @@ impl Store {
             if current_depth >= depth {
                 continue;
             }
+            // Treat wikilinks as undirected for neighbor discovery: follow
+            // links out of `current` and backlinks into it. Edges are stored
+            // directionally (one per [[link]]), but a knowledge-graph neighbor
+            // is related in either direction, so search and context expansion
+            // should surface backlinks too.
             let outgoing = self.get_outgoing(current, Some("wikilink"))?;
-            for (neighbor_id, _) in outgoing {
+            let incoming = self.get_incoming(current, Some("wikilink"))?;
+            for (neighbor_id, _) in outgoing.into_iter().chain(incoming) {
                 if visited.insert(neighbor_id) {
                     let hop = current_depth + 1;
                     results.push((neighbor_id, hop));
@@ -2487,6 +2493,43 @@ mod tests {
         assert_eq!(map[&f2], 1);
         assert_eq!(map[&f3], 2);
         assert!(!map.contains_key(&f4));
+    }
+
+    #[test]
+    fn test_get_neighbors_includes_backlinks() {
+        let store = Store::open_memory().unwrap();
+        let f1 = store
+            .insert_file(
+                "n/f1.md",
+                "h1",
+                100,
+                &[],
+                &generate_docid("n/f1.md"),
+                None,
+                None,
+            )
+            .unwrap();
+        let f2 = store
+            .insert_file(
+                "n/f2.md",
+                "h2",
+                100,
+                &[],
+                &generate_docid("n/f2.md"),
+                None,
+                None,
+            )
+            .unwrap();
+
+        // f2 links to f1; f1 has no outgoing links of its own.
+        store.insert_edge(f2, f1, "wikilink").unwrap();
+
+        // Neighbor discovery is undirected: f1's neighbors include its
+        // backlink f2 even though f1 has no outgoing edge.
+        let neighbors = store.get_neighbors(f1, 1).unwrap();
+        let ids: Vec<i64> = neighbors.iter().map(|(id, _)| *id).collect();
+        assert_eq!(ids, vec![f2]);
+        assert_eq!(neighbors[0].1, 1);
     }
 
     #[test]

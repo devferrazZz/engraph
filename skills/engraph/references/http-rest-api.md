@@ -38,5 +38,5 @@ Generate keys:
 ```bash
 engraph configure --add-api-key       # Interactive
 engraph configure --list-api-keys     # List existing
-engraph configure --revoke-api-key    # Revoke
+engraph configure --revoke-api-key <name>  # Revoke a key by name
 ```

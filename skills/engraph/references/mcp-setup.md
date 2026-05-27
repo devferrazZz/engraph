@@ -32,5 +32,5 @@ engraph index /path/to/documents
 ## HTTP Mode
 
 ```bash
-engraph serve --http              # Port 3030
+engraph serve --http              # Port 3000
 ```

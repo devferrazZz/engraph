@@ -22,8 +22,8 @@ Local knowledge engine for markdown document collections. Combines semantic embe
 ```bash
 engraph index /path/to/documents        # Incremental; only changed files re-embedded
 engraph index /path/to/documents --rebuild
-engraph status                          # File count, health, stats
-engraph clear                           # Drop cached data and models
+engraph status                          # File count, stats, index freshness
+engraph clear                           # Drop the index (--all also removes models)
 ```
 
 ## Search
@@ -60,11 +60,12 @@ engraph graph stats                     # Nodes, edges, density
 engraph context topic "authentication" --budget 8000
 engraph context who "Person Name"
 engraph context project "Project Name"
-engraph context vault-map               # Collection structure overview
-engraph context health                  # Orphans, broken links, stale content, tag hygiene
-engraph context read "path/to/note.md"  # Full content + metadata
-engraph context list --tag architecture # Filter by tag, folder, created_by, etc.
+engraph context vault-map                 # Collection structure overview
+engraph context read "path/to/note.md"    # Full content + metadata
+engraph context list --tags architecture  # Filter by tags, folder, created_by, etc.
 ```
+
+> Health diagnostics (orphans, broken links, stale notes, tag hygiene) are exposed through the MCP `health` tool and the HTTP `GET /api/health` endpoint — see `references/http-rest-api.md`.
 
 ## Setup
 
@@ -72,3 +73,8 @@ engraph context list --tag architecture # Filter by tag, folder, created_by, etc
 engraph index /path/to/documents
 engraph search "your query"
 ```
+
+## References
+
+- `references/mcp-setup.md` — configure engraph as an MCP server (Claude Code, Claude Desktop).
+- `references/http-rest-api.md` — HTTP REST API endpoints, authentication, and examples for web agents and scripts.

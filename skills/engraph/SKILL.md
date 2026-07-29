@@ -2,7 +2,7 @@
 name: engraph
 description: Index and search document collections using hybrid semantic + graph + full-text search. Use when users need to search knowledge bases, find connections between documents, discover related content via link graphs, or query indexed markdown collections.
 license: MIT
-compatibility: Requires engraph CLI. Install via `brew install devwhodevs/tap/engraph` or from GitHub releases.
+compatibility: Requires engraph CLI. Install via `brew install devferrazzz/tap/engraph` (local tap, see README) or from GitHub releases.
 metadata:
   author: jsynowiec
   version: "1.0.0"

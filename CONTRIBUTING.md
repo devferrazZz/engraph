@@ -5,7 +5,7 @@ Thanks for your interest in contributing to engraph.
 ## Getting started
 
 ```bash
-git clone https://github.com/devwhodevs/engraph
+git clone https://github.com/devferrazZz/engraph
 cd engraph
 cargo test --lib    # 225 tests, no network required
 ```

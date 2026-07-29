@@ -157,7 +157,16 @@ pub fn diff_vault(
 }
 
 /// Resolve a wikilink target name to a file ID in the store.
-fn resolve_link_target(store: &Store, target: &str) -> Result<Option<i64>> {
+///
+/// `alias_index` is an optional lowercased-alias -> file_id map built from
+/// frontmatter `aliases:` across the batch being indexed (see
+/// `build_alias_index`). Checked only after exact-path and basename match
+/// fail, so a real file always wins over an alias collision.
+fn resolve_link_target(
+    store: &Store,
+    target: &str,
+    alias_index: Option<&HashMap<String, i64>>,
+) -> Result<Option<i64>> {
     let with_ext = if target.ends_with(".md") {
         target.to_string()
     } else {
@@ -181,7 +190,42 @@ fn resolve_link_target(store: &Store, target: &str) -> Result<Option<i64>> {
         .collect();
 
     matches.sort_by_key(|f| f.path.len());
-    Ok(matches.first().map(|f| f.id))
+    if let Some(f) = matches.first() {
+        return Ok(Some(f.id));
+    }
+
+    // Try frontmatter alias match (e.g. `[[ADR-0014]]` where the file is
+    // `0014-some-slug.md` with `aliases: ["ADR-0014"]`).
+    if let Some(index) = alias_index {
+        let alias_key = target.trim().to_lowercase();
+        if let Some(id) = index.get(&alias_key) {
+            return Ok(Some(*id));
+        }
+    }
+
+    Ok(None)
+}
+
+/// Build a lowercased-alias -> file_id map from frontmatter `aliases:` for
+/// every file in `content_by_path`. Aliases aren't persisted in the store
+/// (unlike `tags`), so this is rebuilt per indexing pass from the content
+/// already read into memory for edge-building.
+fn build_alias_index(
+    store: &Store,
+    content_by_path: &HashMap<String, String>,
+) -> Result<HashMap<String, i64>> {
+    let mut index = HashMap::new();
+    for (rel_path, content) in content_by_path {
+        let Some(file) = store.get_file(rel_path)? else {
+            continue;
+        };
+        if let Some(aliases) = extract_aliases_from_frontmatter(content) {
+            for alias in aliases {
+                index.insert(alias.to_lowercase(), file.id);
+            }
+        }
+    }
+    Ok(index)
 }
 
 /// Build wikilink edges for a single file.
@@ -199,6 +243,32 @@ fn resolve_link_target(store: &Store, target: &str) -> Result<Option<i64>> {
 /// before re-recording, so this is safe to call repeatedly during
 /// incremental indexing.
 pub fn build_edges_for_file(store: &Store, file_id: i64, content: &str) -> Result<()> {
+    build_edges_for_file_inner(store, file_id, content, None)
+}
+
+/// Same as `build_edges_for_file`, but also resolves wikilink targets
+/// against `alias_index` (frontmatter `aliases:` collected across the
+/// current indexing batch — see `build_alias_index`) when an exact path or
+/// basename match fails. Used by the bulk vault-wide edge-building pass,
+/// which is the only call site that has a whole-batch alias index to offer;
+/// single-file call sites (writer, watcher, MCP write handlers) keep calling
+/// plain `build_edges_for_file` and simply won't resolve alias-only links
+/// until the next full pass.
+pub fn build_edges_for_file_with_aliases(
+    store: &Store,
+    file_id: i64,
+    content: &str,
+    alias_index: &HashMap<String, i64>,
+) -> Result<()> {
+    build_edges_for_file_inner(store, file_id, content, Some(alias_index))
+}
+
+fn build_edges_for_file_inner(
+    store: &Store,
+    file_id: i64,
+    content: &str,
+    alias_index: Option<&HashMap<String, i64>>,
+) -> Result<()> {
     let source_path = match store.get_file_by_id(file_id)? {
         Some(f) => f.path,
         None => return Ok(()), // file vanished mid-index; no-op
@@ -209,7 +279,7 @@ pub fn build_edges_for_file(store: &Store, file_id: i64, content: &str) -> Resul
 
     let targets = extract_wikilink_targets(content);
     for target in targets {
-        match resolve_link_target(store, &target)? {
+        match resolve_link_target(store, &target, alias_index)? {
             Some(target_id) if target_id != file_id => {
                 store.insert_edge(file_id, target_id, "wikilink")?;
                 // NOTE: do NOT insert a reverse edge here. Wikilinks are
@@ -649,11 +719,12 @@ fn run_index_inner(
         store.clear_edges()?;
     }
 
+    let alias_index = build_alias_index(store, &content_by_path)?;
     for rel_path in &indexed_rel_paths {
         if let Some(file_record) = store.get_file(rel_path)?
             && let Some(content) = content_by_path.get(rel_path)
         {
-            build_edges_for_file(store, file_record.id, content)?;
+            build_edges_for_file_with_aliases(store, file_record.id, content, &alias_index)?;
         }
     }
 
@@ -1045,6 +1116,63 @@ mod tests {
         let b_in = store.get_incoming(f_b, Some("wikilink")).unwrap();
         assert_eq!(b_in.len(), 1, "B should have 1 incoming wikilink (from A)");
         assert_eq!(b_in[0].0, f_a);
+    }
+
+    #[test]
+    fn test_alias_wikilink_resolves_via_alias_index() {
+        // Regression test for the two-disconnected-resolvers bug: a file
+        // with `aliases: ["ADR-0014"]` frontmatter, whose basename is
+        // `0014-runtime.md`, should resolve `[[ADR-0014]]` from another
+        // file once an alias index is built and passed in. Plain
+        // `build_edges_for_file` (no alias index — the single-file call
+        // sites: writer/watcher/serve) must NOT resolve it, matching
+        // production behavior for those paths.
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        write_file(
+            root,
+            "0014-runtime.md",
+            "---\naliases: [\"ADR-0014\"]\n---\n# ADR-0014\nRuntime decision.",
+        );
+        write_file(root, "0016-stream.md", "# ADR-0016\nSee [[ADR-0014]].");
+
+        let store = Store::open_memory().unwrap();
+        let f_0014 = store
+            .insert_file("0014-runtime.md", "h1", 100, &[], "aaa111", None, None)
+            .unwrap();
+        let f_0016 = store
+            .insert_file("0016-stream.md", "h2", 100, &[], "bbb222", None, None)
+            .unwrap();
+
+        let content_0014 = std::fs::read_to_string(root.join("0014-runtime.md")).unwrap();
+        let content_0016 = std::fs::read_to_string(root.join("0016-stream.md")).unwrap();
+
+        // Without an alias index: unresolved (matches single-file call sites today).
+        build_edges_for_file(&store, f_0016, &content_0016).unwrap();
+        assert_eq!(
+            store.get_outgoing(f_0016, Some("wikilink")).unwrap().len(),
+            0,
+            "plain build_edges_for_file must not resolve alias-only links"
+        );
+
+        // With the batch alias index: resolves correctly.
+        let content_by_path: HashMap<String, String> = [
+            ("0014-runtime.md".to_string(), content_0014),
+            ("0016-stream.md".to_string(), content_0016.clone()),
+        ]
+        .into_iter()
+        .collect();
+        let alias_index = build_alias_index(&store, &content_by_path).unwrap();
+        assert_eq!(alias_index.get("adr-0014"), Some(&f_0014));
+
+        build_edges_for_file_with_aliases(&store, f_0016, &content_0016, &alias_index).unwrap();
+        let out = store.get_outgoing(f_0016, Some("wikilink")).unwrap();
+        assert_eq!(
+            out.len(),
+            1,
+            "ADR-0016 should resolve [[ADR-0014]] via alias"
+        );
+        assert_eq!(out[0].0, f_0014);
     }
 
     #[test]

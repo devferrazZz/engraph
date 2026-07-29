@@ -3,7 +3,7 @@
 ## Install
 
 ```bash
-brew install devwhodevs/tap/engraph
+brew install devferrazzz/tap/engraph  # local tap; see README for setup
 engraph index /path/to/documents
 ```
 

@@ -7,7 +7,7 @@ Connect engraph to Claude Code so it can search, read, and write to your Obsidia
 ### 1. Install and index
 
 ```bash
-brew install devwhodevs/tap/engraph
+brew install devferrazzz/tap/engraph  # local tap; see README for setup
 engraph index ~/path/to/vault
 ```
 

@@ -6,9 +6,9 @@
 
 <p align="center"><strong>Turn your Obsidian vault into a knowledge API.</strong> 5-lane hybrid search, MCP server, HTTP REST API, ChatGPT Actions — all local, all offline.</p>
 
-[![CI](https://github.com/devwhodevs/engraph/actions/workflows/ci.yml/badge.svg)](https://github.com/devwhodevs/engraph/actions/workflows/ci.yml)
+[![CI](https://github.com/devferrazZz/engraph/actions/workflows/ci.yml/badge.svg)](https://github.com/devferrazZz/engraph/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![GitHub release](https://img.shields.io/github/v/release/devwhodevs/engraph)](https://github.com/devwhodevs/engraph/releases)
+[![GitHub release](https://img.shields.io/github/v/release/devferrazZz/engraph)](https://github.com/devferrazZz/engraph/releases)
 
 engraph turns your markdown vault into a searchable knowledge graph that any AI agent can query — Claude Code via [MCP](https://modelcontextprotocol.io), ChatGPT via [Actions](https://platform.openai.com/docs/actions), or any tool via REST API. It combines semantic embeddings, full-text search, wikilink graph traversal, temporal awareness, and LLM-powered reranking into a single local binary. Same model stack as [qmd](https://github.com/tobi/qmd). No API keys, no cloud — everything runs on your machine.
 
@@ -77,14 +77,15 @@ Your vault (markdown files)
 **Install:**
 
 ```bash
-# Homebrew (macOS)
-brew install devwhodevs/tap/engraph
+# Homebrew (macOS) — local tap only; publish your own homebrew-tap repo
+# and formula before this works on another machine.
+brew install devferrazzz/tap/engraph
 
 # Pre-built binaries (macOS arm64, Linux x86_64)
-# → https://github.com/devwhodevs/engraph/releases
+# → https://github.com/devferrazZz/engraph/releases
 
 # From source (requires CMake for llama.cpp)
-cargo install --git https://github.com/devwhodevs/engraph
+cargo install --git https://github.com/devferrazZz/engraph
 ```
 
 **Index your vault:**
@@ -117,7 +118,7 @@ Note how result #3 was found via **graph expansion** — Sarah's note doesn't me
 **Claude Code** — Install the plugin (recommended):
 
 ```bash
-claude plugin marketplace add devwhodevs/engraph
+claude plugin marketplace add devferrazZz/engraph
 claude plugin install engraph@engraph
 ```
 
@@ -141,7 +142,7 @@ Now Claude can search your vault, read notes, build context bundles, and create 
 **AI Agent Skills** — Install the Engraph skills using the skills CLI (recommended):
 
 ```bash
-npx skills add devwhodevs/engraph
+npx skills add devferrazZz/engraph
 ```
 
 **Enable HTTP REST API:**
